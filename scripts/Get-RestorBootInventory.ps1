@@ -48,11 +48,13 @@ $disks = foreach ($disk in Get-Disk | Sort-Object Number) {
     }
 }
 
+$secureBoot = try { Confirm-SecureBootUEFI } catch { $null }
+
 $result = [pscustomobject]@{
     ComputerName = $env:COMPUTERNAME
     GeneratedAt  = (Get-Date).ToString('o')
     FirmwareType = (Get-ComputerInfo -Property BiosFirmwareType).BiosFirmwareType
-    SecureBoot   = try { Confirm-SecureBootUEFI } catch { $null }
+    SecureBoot   = $secureBoot
     Disks        = @($disks)
 }
 
