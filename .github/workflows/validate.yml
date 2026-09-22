@@ -1,0 +1,53 @@
+name: Validate
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  powershell:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Parse PowerShell scripts
+        shell: pwsh
+        run: |
+          $failed = $false
+          Get-ChildItem scripts -Filter *.ps1 | ForEach-Object {
+            $tokens = $null
+            $errors = $null
+            [void][System.Management.Automation.Language.Parser]::ParseFile(
+              $_.FullName,
+              [ref]$tokens,
+              [ref]$errors
+            )
+            if ($errors.Count -gt 0) {
+              $failed = $true
+              $errors | ForEach-Object { Write-Error "$_" -ErrorAction Continue }
+            }
+          }
+          if ($failed) { exit 1 }
+
+      - name: Verify required assets
+        shell: pwsh
+        run: |
+          $required = @(
+            'config/refind.conf',
+            'theme/restor-pc/theme.conf',
+            'theme/restor-pc/assets/background.png',
+            'theme/restor-pc/assets/os_windows.png',
+            'theme/restor-pc/assets/os_linux.png',
+            'theme/restor-pc/assets/selection_big.png',
+            'theme/restor-pc/assets/selection_small.png'
+          )
+          $missing = $required | Where-Object { -not (Test-Path -LiteralPath $_ -PathType Leaf) }
+          if ($missing) {
+            $missing | ForEach-Object { Write-Error "Missing: $_" -ErrorAction Continue }
+            exit 1
+          }
