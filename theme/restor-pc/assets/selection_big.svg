@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+  <defs><linearGradient id="a"><stop stop-color="#ff1645"/><stop offset="1" stop-color="#8a2eff"/></linearGradient><filter id="g"><feGaussianBlur stdDeviation="7"/></filter></defs>
+  <circle cx="128" cy="128" r="111" fill="none" stroke="url(#a)" stroke-width="13" opacity=".55" filter="url(#g)"/>
+  <circle cx="128" cy="128" r="111" fill="none" stroke="url(#a)" stroke-width="6"/>
+</svg>

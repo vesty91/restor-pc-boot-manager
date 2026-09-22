@@ -1,0 +1,14 @@
+# Local diagnostics and backups
+inventory*.json
+backup/
+*.log
+
+# Downloaded third-party archives and extracted payloads
+refind-bin-*.zip
+refind-bin-*/
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
