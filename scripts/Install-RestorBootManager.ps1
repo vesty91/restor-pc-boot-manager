@@ -24,7 +24,7 @@ function Assert-Administrator {
     $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
     $principal = [Security.Principal.WindowsPrincipal]::new($identity)
     if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
-        throw 'Ouvrez PowerShell avec Exécuter en tant qu’administrateur.'
+        throw "Ouvrez PowerShell avec Exécuter en tant qu’administrateur."
     }
 }
 
@@ -41,7 +41,7 @@ function Find-RefindPayload {
     param([string]$Root)
     $binary = Get-ChildItem -LiteralPath $Root -Filter 'refind_x64.efi' -File -Recurse |
         Select-Object -First 1
-    if (-not $binary) { throw 'refind_x64.efi est absent de l’archive.' }
+    if (-not $binary) { throw "refind_x64.efi est absent de l’archive." }
 
     $payload = $binary.Directory.FullName
     if (-not (Test-Path -LiteralPath (Join-Path $payload 'icons'))) {
@@ -53,7 +53,7 @@ function Find-RefindPayload {
 Assert-Administrator
 
 if ((Get-ComputerInfo -Property BiosFirmwareType).BiosFirmwareType -ne 'Uefi') {
-    throw 'Windows n’est pas démarré en mode UEFI.'
+    throw "Windows n’est pas démarré en mode UEFI."
 }
 
 $disk = Get-Disk -Number $DiskNumber
@@ -77,7 +77,7 @@ if ($DiskNumber -in $currentSystemDiskNumbers) {
 }
 
 $expected = "ERASE DISK $DiskNumber $serial"
-Write-Warning 'L’étape suivante efface entièrement le disque affiché ci-dessus.'
+Write-Warning "L’étape suivante efface entièrement le disque affiché ci-dessus."
 Write-Host "Pour confirmer, saisissez exactement : $expected" -ForegroundColor Yellow
 $typed = Read-Host 'Confirmation'
 if ($typed -cne $expected) {
