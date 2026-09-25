@@ -16,7 +16,14 @@ function Convert-Size {
 
 $disks = foreach ($disk in Get-Disk | Sort-Object Number) {
     $partitions = foreach ($partition in Get-Partition -DiskNumber $disk.Number -ErrorAction SilentlyContinue) {
-        $volume = $partition | Get-Volume -ErrorAction SilentlyContinue
+        $volume = $partition | Get-Volume -ErrorAction SilentlyContinue | Select-Object -First 1
+        $fileSystem = $null
+        $fileSystemLabel = $null
+        if ($null -ne $volume) {
+            $fileSystem = [string]$volume.FileSystem
+            $fileSystemLabel = [string]$volume.FileSystemLabel
+        }
+
         [pscustomobject]@{
             PartitionNumber = $partition.PartitionNumber
             DriveLetter     = $partition.DriveLetter
@@ -24,8 +31,8 @@ $disks = foreach ($disk in Get-Disk | Sort-Object Number) {
             GptType         = [string]$partition.GptType
             SizeBytes       = [UInt64]$partition.Size
             Size            = Convert-Size $partition.Size
-            FileSystem      = $volume.FileSystem
-            Label           = $volume.FileSystemLabel
+            FileSystem      = $fileSystem
+            Label           = $fileSystemLabel
             IsBoot          = $partition.IsBoot
             IsSystem        = $partition.IsSystem
         }
