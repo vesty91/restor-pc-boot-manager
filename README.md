@@ -1,103 +1,80 @@
 # Restor-PC Boot Manager
 
-Boot manager UEFI graphique basé sur [rEFInd](https://www.rodsbooks.com/refind/) et installé sur un disque NVMe dédié.
+Boot manager UEFI graphique basé sur rEFInd, installé sur un NVMe dédié et conçu pour démarrer directement deux installations Windows indépendantes, avec des outils de diagnostic.
 
-Le projet cible d'abord deux installations Windows existantes. Linux pourra être ajouté plus tard sans reconstruire le support : rEFInd analyse les autres partitions EFI au démarrage.
+## État actuel validé
 
-## Principes de sécurité
-
-- Le NVMe dédié contient uniquement le chargeur et son thème.
-- Les partitions Windows existantes ne sont ni formatées ni modifiées.
-- Le script refuse un disque marqué `Boot` ou `System` par Windows.
-- Toute initialisation exige une confirmation contenant le numéro du disque et son numéro de série.
-- Le reste du NVMe demeure non alloué par défaut.
-- La première exécution recommandée est l'inventaire en lecture seule.
-
-> [!CAUTION]
-> `Install-RestorBootManager.ps1` initialise le disque explicitement sélectionné et efface tout ce qu'il contient. Vérifiez le modèle, la taille et le numéro de série avant confirmation.
-
-## Pré-requis
-
-- PC x64 démarré en mode UEFI ;
-- Windows 10/11 ;
-- PowerShell 5.1 ou 7 exécuté en administrateur ;
-- NVMe dédié ;
-- archive binaire officielle rEFInd `.zip` téléchargée depuis la [page officielle](https://www.rodsbooks.com/refind/getting.html) ;
-- Secure Boot désactivé pour le premier test. Sa prise en charge sera traitée séparément avec Shim/MOK.
-
-## Démarrage rapide
-
-### 1. Inventaire sans modification
-
-```powershell
-Set-ExecutionPolicy -Scope Process Bypass
-.\scripts\Get-RestorBootInventory.ps1 -ExportPath .\inventory.json
+```text
+Firmware UEFI
+   |
+   v
+NVMe RESTOR-PC
+   |
+   +-- RESTOR-BOOT   EFI 1 Gio      -> rEFInd + thème
+   +-- CODE-EFI      EFI 512 Mio    -> BCD dédié WIN CODE
+   +-- VESTY-EFI     EFI 512 Mio    -> BCD dédié WIN VESTY
+   +-- RESTOR-TOOLS  NTFS 64 Gio    -> outils / ISO / WinPE
+   +-- espace libre                 -> Linux plus tard
 ```
 
-Repérez le NVMe dédié avec son `DiskNumber`, son modèle, sa taille et son numéro de série.
+Le menu rEFInd affiche actuellement : **WIN CODE**, **WIN VESTY** et **MEMTEST86+**.
 
-### 2. Simulation de l'installation
+WIN CODE et WIN VESTY possèdent chacun leur propre partition EFI et leur propre BCD avec `timeout 0`. Le menu bleu Windows intermédiaire n'est donc plus nécessaire.
 
-```powershell
-.\scripts\Install-RestorBootManager.ps1 `
-  -DiskNumber 3 `
-  -RefindArchive "$env:USERPROFILE\Downloads\refind-bin-0.14.2.zip" `
-  -WhatIf
+## Thème
+
+Le thème Restor-PC utilise un fond personnalisé, des icônes 176×176 dédiées et une sélection néon rouge/violet.
+
+```text
+theme/restor-pc/assets/win_code.png
+theme/restor-pc/assets/win_vesty.png
+theme/restor-pc/assets/memtest86plus.png
 ```
 
-### 3. Installation réelle
+## Configuration rEFInd
 
-Retirez `-WhatIf` uniquement après validation du bon disque :
+La configuration finale est dans `config/refind.conf`. Elle utilise `scanfor manual` pour éviter les doublons et cible explicitement `CODE-EFI`, `VESTY-EFI` et `\EFI\TOOLS\MEMTEST\mt86plus.efi`.
 
-```powershell
-.\scripts\Install-RestorBootManager.ps1 `
-  -DiskNumber 3 `
-  -RefindArchive "$env:USERPROFILE\Downloads\refind-bin-0.14.2.zip"
+## Scripts
+
+```text
+scripts/
+  Get-RestorBootInventory.ps1
+  Install-RestorBootManager.ps1
+  Update-RestorBootMenu.ps1
+  Test-RestorBootManager.ps1
+  Backup-RestorBootManager.ps1
 ```
 
-Le script crée une ESP FAT32 de 1 Gio, copie rEFInd et le thème dans le chemin de secours UEFI `EFI\BOOT\BOOTX64.EFI`, puis laisse le reste du NVMe non alloué.
-
-### 4. Validation
+### Validation
 
 ```powershell
 .\scripts\Test-RestorBootManager.ps1 -DiskNumber 3
 ```
 
-Redémarrez ensuite via le menu de démarrage ponctuel de la carte mère (`F11`, `F12`, `Esc` selon le constructeur) et choisissez le NVMe Restor-PC.
-
-## Arborescence
-
-```text
-scripts/
-  Get-RestorBootInventory.ps1    Diagnostic en lecture seule
-  Install-RestorBootManager.ps1  Initialisation et installation contrôlées
-  Test-RestorBootManager.ps1     Validation des fichiers EFI
-  Update-RestorBootMenu.ps1      Nettoyage et mise à jour du menu installé
-theme/restor-pc/
-  theme.conf                     Configuration graphique rEFInd
-  assets/                        Sources SVG et fichiers PNG générés
-docs/
-  ARCHITECTURE.md
-  INSTALLATION.md
-  RECOVERY.md
-```
-
-## Nettoyer le menu installé
-
-Si rEFInd affiche plusieurs copies de Windows ou de WinRE, mettez à jour la
-configuration installée sans reformater le NVMe :
+### Mise à jour du menu installé
 
 ```powershell
 .\scripts\Update-RestorBootMenu.ps1 -DiskNumber 3
 ```
 
-Le script sauvegarde le fichier `refind.conf` existant, masque les volumes
-Windows de l’auto-détection et crée une seule entrée `WIN CODE / WIN VESTY`.
+### Sauvegarde
 
-## État du projet
+```powershell
+.\scripts\Backup-RestorBootManager.ps1 -DiskNumber 3 -DestinationRoot C:\RESTOR-PC-BACKUP
+```
 
-Version initiale : boot manager externe autonome pour deux Windows, thème noir métallique rouge/violet, ajout futur de Linux prévu.
+## Sécurité
+
+> [!CAUTION]
+> Les scripts d'installation initiale peuvent modifier ou effacer un disque. Vérifiez toujours modèle, taille, numéro de série et numéro de disque avant toute opération destructive.
+
+Le NVMe RESTOR-PC peut apparaître `IsSystem=True` une fois qu'il est réellement utilisé pour amorcer rEFInd. Les scripts de maintenance ne doivent donc pas considérer ce seul indicateur comme une anomalie.
+
+## MemTest86+
+
+Le binaire MemTest86+ n'est pas inclus dans le dépôt. Utilisez le binaire officiel x86_64 et installez-le sous `EFI\TOOLS\MEMTEST\mt86plus.efi`.
 
 ## Licence
 
-Les scripts et le thème de ce dépôt sont distribués sous licence MIT. rEFInd n'est pas inclus et conserve sa propre licence.
+Les scripts et le thème de ce dépôt sont distribués sous licence MIT. rEFInd et MemTest86+ conservent leurs licences respectives.
