@@ -72,6 +72,7 @@ scripts/
   Get-RestorBootInventory.ps1    Diagnostic en lecture seule
   Install-RestorBootManager.ps1  Initialisation et installation contrôlées
   Test-RestorBootManager.ps1     Validation des fichiers EFI
+  Update-RestorBootMenu.ps1      Nettoyage et mise à jour du menu installé
 theme/restor-pc/
   theme.conf                     Configuration graphique rEFInd
   assets/                        Sources SVG et fichiers PNG générés
@@ -80,6 +81,18 @@ docs/
   INSTALLATION.md
   RECOVERY.md
 ```
+
+## Nettoyer le menu installé
+
+Si rEFInd affiche plusieurs copies de Windows ou de WinRE, mettez à jour la
+configuration installée sans reformater le NVMe :
+
+```powershell
+.\scripts\Update-RestorBootMenu.ps1 -DiskNumber 3
+```
+
+Le script sauvegarde le fichier `refind.conf` existant, masque les volumes
+Windows de l’auto-détection et crée une seule entrée `WIN CODE / WIN VESTY`.
 
 ## État du projet
 
