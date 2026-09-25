@@ -50,6 +50,28 @@ function Find-RefindPayload {
     return $payload
 }
 
+function Get-RenderedRefindConfig {
+    param(
+        [Parameter(Mandatory)]
+        [string]$TemplatePath,
+
+        [Parameter(Mandatory)]
+        [string]$WindowsEspGuid,
+
+        [Parameter(Mandatory)]
+        [string[]]$WindowsVolumeGuids
+    )
+
+    $template = Get-Content -LiteralPath $TemplatePath -Raw
+    if (-not $template.Contains('{{WINDOWS_ESP_GUID}}') -or
+        -not $template.Contains('{{WINDOWS_VOLUME_GUIDS}}')) {
+        throw 'Le modèle refind.conf ne contient pas les marqueurs attendus.'
+    }
+
+    $rendered = $template.Replace('{{WINDOWS_ESP_GUID}}', $WindowsEspGuid)
+    return $rendered.Replace('{{WINDOWS_VOLUME_GUIDS}}', ($WindowsVolumeGuids -join ','))
+}
+
 Assert-Administrator
 
 if ((Get-ComputerInfo -Property BiosFirmwareType).BiosFirmwareType -ne 'Uefi') {
@@ -74,6 +96,29 @@ if ($disk.Size -lt 2GB) {
 $currentSystemDiskNumbers = @(Get-Partition | Where-Object { $_.IsBoot -or $_.IsSystem } | Select-Object -ExpandProperty DiskNumber -Unique)
 if ($DiskNumber -in $currentSystemDiskNumbers) {
     throw "Refus : le disque $DiskNumber contient une partition système ou de démarrage."
+}
+
+$windowsEsp = Get-Partition |
+    Where-Object { $_.IsSystem -and $_.DiskNumber -ne $DiskNumber } |
+    Select-Object -First 1
+if (-not $windowsEsp) {
+    throw 'Aucune partition EFI Windows marquée System n’a été trouvée.'
+}
+
+$windowsEspGuid = ([string]$windowsEsp.Guid).Trim('{}')
+if ([string]::IsNullOrWhiteSpace($windowsEspGuid)) {
+    throw 'La partition EFI Windows ne possède pas de GUID GPT exploitable.'
+}
+
+$windowsVolumeGuids = @(
+    foreach ($systemDiskNumber in $currentSystemDiskNumbers) {
+        Get-Partition -DiskNumber $systemDiskNumber -ErrorAction SilentlyContinue |
+            ForEach-Object { ([string]$_.Guid).Trim('{}') } |
+            Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+    }
+)
+if ($windowsVolumeGuids.Count -eq 0) {
+    throw 'Aucun GUID de volume Windows n’a été trouvé pour filtrer le menu.'
 }
 
 $expected = "ERASE DISK $DiskNumber $serial"
@@ -125,7 +170,15 @@ try {
     Copy-Item -LiteralPath (Join-Path $themeDestination 'assets\os_windows.png') -Destination (Join-Path $bootRoot 'icons\os_win.png') -Force
     Copy-Item -LiteralPath (Join-Path $themeDestination 'assets\os_linux.png') -Destination (Join-Path $bootRoot 'icons\os_linux.png') -Force
 
-    Copy-Item -LiteralPath (Join-Path $projectRoot 'config\refind.conf') -Destination (Join-Path $bootRoot 'refind.conf') -Force
+    $renderedConfig = Get-RenderedRefindConfig `
+        -TemplatePath (Join-Path $projectRoot 'config\refind.conf') `
+        -WindowsEspGuid $windowsEspGuid `
+        -WindowsVolumeGuids $windowsVolumeGuids
+    [IO.File]::WriteAllText(
+        (Join-Path $bootRoot 'refind.conf'),
+        $renderedConfig,
+        [Text.Encoding]::ASCII
+    )
 
     $manifest = [pscustomobject]@{
         InstalledAt   = (Get-Date).ToString('o')
