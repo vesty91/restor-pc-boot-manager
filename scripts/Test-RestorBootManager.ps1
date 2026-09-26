@@ -8,6 +8,25 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+function Get-PngSize {
+    param([string]$Path)
+    $stream = [IO.File]::Open($Path, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read)
+    try {
+        $header = New-Object byte[] 24
+        if ($stream.Read($header, 0, 24) -lt 24) { return $null }
+        $signature = [byte[]](0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A)
+        for ($index = 0; $index -lt 8; $index++) {
+            if ($header[$index] -ne $signature[$index]) { return $null }
+        }
+        if ([Text.Encoding]::ASCII.GetString($header, 12, 4) -ne 'IHDR') { return $null }
+        $width = ([int]$header[16] -shl 24) -bor ([int]$header[17] -shl 16) -bor ([int]$header[18] -shl 8) -bor [int]$header[19]
+        $height = ([int]$header[20] -shl 24) -bor ([int]$header[21] -shl 16) -bor ([int]$header[22] -shl 8) -bor [int]$header[23]
+        return [pscustomobject]@{ Width = $width; Height = $height }
+    } finally {
+        $stream.Dispose()
+    }
+}
+
 function Get-PartitionByLabel {
     param([int]$Disk,[string]$Label)
     foreach ($p in Get-Partition -DiskNumber $Disk) {
@@ -175,6 +194,18 @@ public static class RestorPartitionName {
         Check = 'LOCKPICK loader'
         Status = if ($lockEntryOk) { 'OK' } else { 'MISSING' }
         Path = $configPath
+    }
+
+    $iconPath = Join-Path $r 'EFI\BOOT\themes\restor-pc\assets\lockpick.png'
+    $iconSize = $null
+    if (Test-Path -LiteralPath $iconPath) { $iconSize = Get-PngSize -Path $iconPath }
+    $iconOk = ($null -ne $iconSize) -and ($iconSize.Width -eq 176) -and ($iconSize.Height -eq 176)
+    if (-not $iconOk) { $failed = $true }
+    $iconDetail = if ($iconOk) { '176x176' } elseif ($iconSize) { ('{0}x{1}' -f $iconSize.Width, $iconSize.Height) } else { 'PNG invalide ou absent' }
+    [pscustomobject]@{
+        Check = 'lockpick.png 176x176'
+        Status = if ($iconOk) { 'OK' } else { 'MISSING' }
+        Path = $iconDetail
     }
 
     $bcdPath = Join-Path $rescue 'EFI\Microsoft\Boot\BCD'

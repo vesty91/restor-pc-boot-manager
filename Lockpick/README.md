@@ -50,6 +50,58 @@ Le contenu complet de l'ISO est conservé, car Lockpick utilise aussi des fichie
 \Programs\Lockpick\
 ```
 
+### Noms LOCKPICK-EF et LOCKPICK-EFI
+
+FAT32 n'accepte que 11 caractères dans un libellé de volume. Windows peut donc afficher :
+
+```text
+LOCKPICK-EF
+```
+
+Le nom GPT de la partition est :
+
+```text
+LOCKPICK-EFI
+```
+
+rEFInd utilise volontairement ce nom GPT :
+
+```text
+volume "LOCKPICK-EFI"
+```
+
+`scripts/Install-Lockpick.ps1` accepte déjà les deux libellés FAT `LOCKPICK-EFI` et `LOCKPICK-EF` pour reconnaître la partition existante. `scripts/Test-RestorBootManager.ps1` continue de la reconnaître par `Programs\Lockpick\Lockpick.exe`, puis vérifie le nom GPT `LOCKPICK-EFI` si le libellé FAT est `LOCKPICK-EF`.
+
+Le fichier `config/refind.conf` validé au démarrage physique ne doit pas être modifié pour ce seul écart de libellé.
+
+### Microsoft Defender
+
+`Programs\Lockpick\Lockpick.exe` sert à récupérer des mots de passe. Defender peut le signaler comme outil de récupération ou outil de sécurité, puis le placer en quarantaine. Le bouton LOCKPICK resterait visible, mais l'environnement n'aurait plus son programme.
+
+`Install-Lockpick.ps1` ajoute une seule exclusion, le chemin de volume de `LOCKPICK-EFI` :
+
+```powershell
+Add-MpPreference -ExclusionPath $lockVolumePath
+```
+
+Il relit ensuite `Get-MpPreference` et affiche `[OK]` si ce chemin est présent, ou `[WARN]` s'il est absent. Le script ne désactive jamais la protection Defender pour tout le PC.
+
+### Icône
+
+L'icône affichée par rEFInd est le PNG versionné :
+
+```text
+theme\restor-pc\assets\lockpick.png
+```
+
+Il fait 176×176. Quand ce fichier est présent, `Install-Lockpick.ps1` le conserve et le copie seulement vers :
+
+```text
+RESTOR-BOOT:\EFI\BOOT\themes\restor-pc\assets\lockpick.png
+```
+
+La copie est contrôlée par SHA-256. L'icône 48×48 de `autorun.ico` ne remplace pas ce fichier.
+
 ---
 
 # Restaurer Lockpick
@@ -136,7 +188,7 @@ Le script :
 8. réutilise `LOCKPICK-EFI` si elle existe déjà et est conforme ;
 9. copie le contenu complet de l'ISO ;
 10. compare les SHA-256 des fichiers essentiels ;
-11. installe l'icône `lockpick.png` ;
+11. copie l'icône versionnée `lockpick.png` sans la régénérer ;
 12. ajoute ou met à jour l'entrée `LOCKPICK` dans rEFInd ;
 13. vérifie que les autres environnements de boot n'ont pas été modifiés ;
 14. lance `Test-RestorBootManager.ps1` ;

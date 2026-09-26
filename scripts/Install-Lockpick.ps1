@@ -273,6 +273,104 @@ function Get-LabelForLetter {
     return ''
 }
 
+function Test-DefenderExclusionPresent {
+    param([Parameter(Mandatory)][string]$Path)
+    $expected = $Path.TrimEnd('\')
+    $preferences = Get-MpPreference
+    foreach ($item in @($preferences.ExclusionPath)) {
+        if ($item -and ($item.TrimEnd('\') -ieq $expected)) { return $true }
+    }
+    return $false
+}
+
+function Get-PngSize {
+    param([Parameter(Mandatory)][string]$Path)
+    $stream = [IO.File]::Open($Path, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read)
+    try {
+        $header = New-Object byte[] 24
+        if ($stream.Read($header, 0, 24) -lt 24) { throw ("PNG trop court : " + $Path) }
+        $signature = [byte[]](0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A)
+        for ($index = 0; $index -lt 8; $index++) {
+            if ($header[$index] -ne $signature[$index]) { throw ("Signature PNG invalide : " + $Path) }
+        }
+        $chunk = [Text.Encoding]::ASCII.GetString($header, 12, 4)
+        if ($chunk -ne 'IHDR') { throw ("Chunk IHDR absent : " + $Path) }
+        $width = ([int]$header[16] -shl 24) -bor ([int]$header[17] -shl 16) -bor ([int]$header[18] -shl 8) -bor [int]$header[19]
+        $height = ([int]$header[20] -shl 24) -bor ([int]$header[21] -shl 16) -bor ([int]$header[22] -shl 8) -bor [int]$header[23]
+        return [pscustomobject]@{ Width = $width; Height = $height }
+    } finally {
+        $stream.Dispose()
+    }
+}
+
+function Assert-LockpickPng {
+    param([Parameter(Mandatory)][string]$Path)
+    $size = Get-PngSize -Path $Path
+    if ($size.Width -ne 176 -or $size.Height -ne 176) {
+        throw ("lockpick.png fait {0}x{1}, 176x176 attendu : {2}" -f $size.Width, $size.Height, $Path)
+    }
+}
+
+function Initialize-LockpickIconType {
+    if ('LockpickIconExtract' -as [type]) { return }
+    Add-Type -AssemblyName System.Drawing
+    Add-Type -ReferencedAssemblies System.Drawing -TypeDefinition @'
+using System;
+using System.Drawing;
+using System.Runtime.InteropServices;
+public static class LockpickIconExtract {
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    static extern uint PrivateExtractIcons(string file, int index, int cx, int cy, IntPtr[] icons, uint[] ids, uint count, uint flags);
+    [DllImport("user32.dll", SetLastError = true)]
+    static extern bool DestroyIcon(IntPtr handle);
+    public static Bitmap ExtractLargest(string file) {
+        Bitmap best = null;
+        int bestSize = 0;
+        int[] sizes = new int[] { 256, 128, 64, 48, 32 };
+        for (int index = 0; index < 4; index++) {
+            foreach (int size in sizes) {
+                IntPtr[] icons = new IntPtr[1];
+                uint[] ids = new uint[1];
+                uint found = PrivateExtractIcons(file, index, size, size, icons, ids, 1, 0);
+                if (found == 0 || icons[0] == IntPtr.Zero) continue;
+                try {
+                    using (Icon icon = Icon.FromHandle(icons[0]))
+                    using (Bitmap raw = icon.ToBitmap()) {
+                        if (raw.Width > bestSize) {
+                            if (best != null) best.Dispose();
+                            best = new Bitmap(raw);
+                            bestSize = raw.Width;
+                        }
+                    }
+                } finally {
+                    DestroyIcon(icons[0]);
+                }
+            }
+        }
+        return best;
+    }
+}
+'@
+}
+
+function Save-ScaledLockpickPng {
+    param(
+        [Parameter(Mandatory)]$Image,
+        [Parameter(Mandatory)][string]$Destination
+    )
+    $bitmap = New-Object System.Drawing.Bitmap 176, 176, ([System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
+    $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
+    try {
+        $graphics.Clear([System.Drawing.Color]::FromArgb(0, 0, 0, 0))
+        $graphics.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
+        $graphics.DrawImage($Image, (New-Object System.Drawing.Rectangle 0, 0, 176, 176))
+        $bitmap.Save($Destination, [System.Drawing.Imaging.ImageFormat]::Png)
+    } finally {
+        $graphics.Dispose()
+        $bitmap.Dispose()
+    }
+}
+
 Assert-Administrator
 $projectRoot = Split-Path -Parent $PSScriptRoot
 $iconDestinationInRepo = Join-Path $projectRoot 'theme\restor-pc\assets\lockpick.png'
@@ -496,7 +594,19 @@ try {
     $lockVolumePath = [string](Get-Volume -DriveLetter $lockLetter).Path
     if ($lockVolumePath) {
         Add-MpPreference -ExclusionPath $lockVolumePath
-        Write-Step 'OK' ("Exclusion antivirus limitée au volume Lockpick : " + $lockVolumePath)
+        $exclusionConfirmed = $false
+        try {
+            $exclusionConfirmed = Test-DefenderExclusionPresent -Path $lockVolumePath
+        } catch {
+            Write-Step 'WARN' ("Lecture des exclusions Defender impossible : " + $_.Exception.Message)
+        }
+        if ($exclusionConfirmed) {
+            Write-Step 'OK' ("Exclusion Defender confirmée pour le volume Lockpick : " + $lockVolumePath)
+        } else {
+            Write-Step 'WARN' ("Exclusion Defender absente après Add-MpPreference : " + $lockVolumePath + ". Programs\Lockpick\Lockpick.exe peut être mis en quarantaine.")
+        }
+    } else {
+        Write-Step 'WARN' 'Chemin de volume Lockpick introuvable. Aucune exclusion Defender ajoutée.'
     }
     $copyNeeded = $false
     foreach ($relative in $sourceHashes.Keys) {
@@ -537,21 +647,43 @@ try {
     $lockLogical = Get-LogicalDisk $lockLetter
     Write-Step 'OK' ("Partition {0} octets, libre {1} octets, libellé [{2}]" -f $lockLogical.Size, $lockLogical.FreeSpace, $lockLogical.VolumeName)
 
-    $iconSource = Join-Path $isoRoot 'Programs\Lockpick\autorun.ico'
-    if (-not (Test-Path -LiteralPath $iconSource)) { throw 'autorun.ico absent de l''ISO.' }
-    Add-Type -AssemblyName System.Drawing
-    $sourceImage = [System.Drawing.Image]::FromFile($iconSource)
-    $bitmap = New-Object System.Drawing.Bitmap 176, 176, ([System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
-    $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
-    $graphics.Clear([System.Drawing.Color]::FromArgb(0, 0, 0, 0))
-    $graphics.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
-    $graphics.DrawImage($sourceImage, (New-Object System.Drawing.Rectangle 0, 0, 176, 176))
-    $bitmap.Save($iconDestinationInRepo, [System.Drawing.Imaging.ImageFormat]::Png)
-    $graphics.Dispose(); $bitmap.Dispose(); $sourceImage.Dispose()
+    if (Test-Path -LiteralPath $iconDestinationInRepo) {
+        Assert-LockpickPng -Path $iconDestinationInRepo
+        Write-Step 'OK' 'Icône versionnée lockpick.png conservée, aucune régénération.'
+    } else {
+        Write-Step 'WARN' 'theme\restor-pc\assets\lockpick.png est absent. Génération de secours.'
+        Initialize-LockpickIconType
+        $iconDirectory = Split-Path -Parent $iconDestinationInRepo
+        if (-not (Test-Path -LiteralPath $iconDirectory)) { New-Item -ItemType Directory -Path $iconDirectory | Out-Null }
+        $lockpickExecutable = Join-Path $isoRoot 'Programs\Lockpick\Lockpick.exe'
+        $extracted = $null
+        if (Test-Path -LiteralPath $lockpickExecutable) {
+            $extracted = [LockpickIconExtract]::ExtractLargest($lockpickExecutable)
+        }
+        if ($extracted) {
+            try { Save-ScaledLockpickPng -Image $extracted -Destination $iconDestinationInRepo }
+            finally { $extracted.Dispose() }
+            Write-Step 'OK' 'Icône de secours extraite depuis Lockpick.exe.'
+        } else {
+            $iconSource = Join-Path $isoRoot 'Programs\Lockpick\autorun.ico'
+            if (-not (Test-Path -LiteralPath $iconSource)) { throw 'Aucune icône Lockpick disponible.' }
+            $sourceImage = [System.Drawing.Image]::FromFile($iconSource)
+            try { Save-ScaledLockpickPng -Image $sourceImage -Destination $iconDestinationInRepo }
+            finally { $sourceImage.Dispose() }
+            Write-Step 'OK' 'Icône de secours produite depuis autorun.ico.'
+        }
+        Assert-LockpickPng -Path $iconDestinationInRepo
+    }
     $assetDir = $restorLetter + ':\EFI\BOOT\themes\restor-pc\assets'
     if (-not (Test-Path -LiteralPath $assetDir)) { throw 'Dossier d''assets rEFInd introuvable.' }
-    Copy-Item -LiteralPath $iconDestinationInRepo -Destination (Join-Path $assetDir 'lockpick.png') -Force
-    Write-Step 'OK' 'lockpick.png installé.'
+    $installedIcon = Join-Path $assetDir 'lockpick.png'
+    $sourceIconHash = (Get-FileHash -LiteralPath $iconDestinationInRepo -Algorithm SHA256).Hash
+    Copy-Item -LiteralPath $iconDestinationInRepo -Destination $installedIcon -Force
+    $installedIconHash = (Get-FileHash -LiteralPath $installedIcon -Algorithm SHA256).Hash
+    if ($installedIconHash -ne $sourceIconHash) {
+        throw ("SHA256 lockpick.png différent après copie.`nDépôt : {0}`nRESTOR-BOOT : {1}" -f $sourceIconHash, $installedIconHash)
+    }
+    Write-Step 'OK' ("lockpick.png copié, SHA256 " + $installedIconHash)
 
     $configBackup = $liveConfig + '.bak-' + $timestamp
     Copy-Item -LiteralPath $liveConfig -Destination $configBackup -Force

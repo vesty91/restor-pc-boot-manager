@@ -63,7 +63,25 @@ Le chargeur x86_64 est placé sur RESTOR-BOOT sous `\EFI\TOOLS\MEMTEST\mt86plus.
 
 ## Lockpick
 
-`LOCKPICK-EFI` reçoit la copie intégrale de `Lockpick.iso`. rEFInd chaîne directement `\EFI\BOOT\BOOTX64.EFI` sur le volume `LOCKPICK-EFI`. Le BCD et le WIM d'origine ne sont pas reconstruits.
+`LOCKPICK-EFI` reçoit la copie intégrale de `Lockpick.iso`. rEFInd chaîne directement `\EFI\BOOT\BOOTX64.EFI`. Le BCD et le WIM d'origine ne sont pas reconstruits.
+
+FAT32 limite un libellé de volume à 11 caractères. Windows affiche donc souvent :
+
+```text
+LOCKPICK-EF
+```
+
+Le nom GPT de la partition reste :
+
+```text
+LOCKPICK-EFI
+```
+
+L'entrée rEFInd validée utilise volontairement `volume "LOCKPICK-EFI"`, qui correspond à ce nom GPT. `Install-Lockpick.ps1` reconnaît déjà les libellés FAT `LOCKPICK-EFI` et `LOCKPICK-EF`. `Test-RestorBootManager.ps1` retrouve la partition par `Programs\Lockpick\Lockpick.exe` et exige le nom GPT `LOCKPICK-EFI` lorsque le libellé FAT est `LOCKPICK-EF`.
+
+`Programs\Lockpick\Lockpick.exe` est un outil de récupération de mots de passe. Microsoft Defender peut le classer comme outil de sécurité ou de récupération et le mettre en quarantaine. Le script ajoute une seule exclusion, limitée au chemin de volume `LOCKPICK-EFI`, puis vérifie qu'elle figure dans `Get-MpPreference`. Defender n'est pas désactivé.
+
+L'icône de menu est le fichier versionné `theme/restor-pc/assets/lockpick.png`, PNG 176×176. Tant que ce fichier est présent, l'installation le copie vers RESTOR-BOOT et ne le régénère pas.
 
 ## Linux futur
 
