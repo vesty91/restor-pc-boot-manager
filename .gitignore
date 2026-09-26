@@ -6,6 +6,7 @@ backup/
 # Downloaded third-party archives and extracted payloads
 refind-bin-*.zip
 refind-bin-*/
+Lockpick.iso
 
 # OS/editor noise
 .DS_Store
