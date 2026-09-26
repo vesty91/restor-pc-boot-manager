@@ -50,7 +50,16 @@ scripts/
   Backup-RestorBootManager.ps1
   Install-RescueGridWinPE.ps1
   Install-Lockpick.ps1
+  check-qemu.ps1
+  build-test-disk.ps1
+  test-boot.ps1
 ```
+
+### Banc QEMU
+
+`Ctrl+Shift+B` lance `scripts/test-boot.ps1`. Les images restent dans `test\` et ne touchent aucun disque physique.
+
+Le binaire rEFInd n'est pas versionné. Placez la publication officielle 0.14.2 comme décrit dans `bootloader/README.md`.
 
 ### Validation
 

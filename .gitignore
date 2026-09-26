@@ -11,5 +11,14 @@ Lockpick.iso
 # OS/editor noise
 .DS_Store
 Thumbs.db
-.vscode/
+.vscode/*
+!.vscode/tasks.json
 .idea/
+
+# Banc QEMU local. Les binaires rEFInd restent hors dépôt (GPL-3, voir bootloader/README.md).
+test/efi-test.img
+test/*.img
+test/logs/
+test/stubs/
+test/*.fd
+bootloader/refind/
