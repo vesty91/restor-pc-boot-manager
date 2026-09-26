@@ -37,11 +37,29 @@ function Get-FreeDriveLetter {
 }
 
 $disk = Get-Disk -Number $DiskNumber
-$labels = 'RESTOR-BOOT','CODE-EFI','VESTY-EFI','RESTOR-TOOLS','RESCUE-EFI'
+$labels = 'RESTOR-BOOT','CODE-EFI','VESTY-EFI','RESTOR-TOOLS','RESCUE-EFI','LOCKPICK-EFI'
 $parts = @{}
 
 foreach ($label in $labels) {
     $p = Get-PartitionByLabel -Disk $DiskNumber -Label $label
+    if (-not $p -and $label -eq 'LOCKPICK-EFI') {
+        foreach ($candidate in (Get-Partition -DiskNumber $DiskNumber)) {
+            if ($candidate.Type -eq 'Reserved') { continue }
+            if ($candidate.Size -lt 900MB -or $candidate.Size -gt 1200MB) { continue }
+            $probe = $candidate.DriveLetter
+            $temporaryProbe = $false
+            if (-not $probe) {
+                $probe = Get-FreeDriveLetter
+                Add-PartitionAccessPath -DiskNumber $DiskNumber -PartitionNumber $candidate.PartitionNumber -AccessPath ($probe + ':\')
+                $temporaryProbe = $true
+            }
+            $hasLockpick = Test-Path -LiteralPath ($probe + ':\Programs\Lockpick\Lockpick.exe')
+            if ($temporaryProbe) {
+                Remove-PartitionAccessPath -DiskNumber $DiskNumber -PartitionNumber $candidate.PartitionNumber -AccessPath ($probe + ':\') -ErrorAction SilentlyContinue
+            }
+            if ($hasLockpick) { $p = $candidate; break }
+        }
+    }
     if (-not $p) { throw ('Partition/volume manquant : ' + $label) }
     $parts[$label] = $p
 }
@@ -64,6 +82,40 @@ try {
     $v = Mount-Temporary $parts['VESTY-EFI']
     $rescue = Mount-Temporary $parts['RESCUE-EFI']
     $tools = Mount-Temporary $parts['RESTOR-TOOLS']
+    $lock = Mount-Temporary $parts['LOCKPICK-EFI']
+    $lockLetter = $lock.Substring(0, 1)
+    $lockFat = [string](Get-CimInstance Win32_LogicalDisk -Filter ("DeviceID='" + $lockLetter + ":'")).VolumeName
+    if ($lockFat -ne 'LOCKPICK-EFI') {
+        Add-Type -TypeDefinition @'
+using System;
+using System.ComponentModel;
+using System.Runtime.InteropServices;
+using Microsoft.Win32.SafeHandles;
+public static class RestorPartitionName {
+    [DllImport("kernel32.dll", SetLastError=true, CharSet=CharSet.Unicode)]
+    static extern SafeFileHandle CreateFile(string name, uint access, uint share, IntPtr sec, uint disp, uint flags, IntPtr template);
+    [DllImport("kernel32.dll", SetLastError=true)]
+    static extern bool DeviceIoControl(SafeFileHandle handle, uint code, IntPtr inBuffer, uint inSize, IntPtr outBuffer, uint outSize, out uint returned, IntPtr overlapped);
+    public static string Read(string path) {
+        var handle = CreateFile(path, 0x80000000, 3, IntPtr.Zero, 3, 0, IntPtr.Zero);
+        if (handle.IsInvalid) throw new Win32Exception(Marshal.GetLastWin32Error());
+        var buffer = Marshal.AllocHGlobal(144);
+        try {
+            uint returned;
+            if (!DeviceIoControl(handle, 0x00070048, IntPtr.Zero, 0, buffer, 144, out returned, IntPtr.Zero))
+                throw new Win32Exception(Marshal.GetLastWin32Error());
+            var data = new byte[72];
+            Marshal.Copy(IntPtr.Add(buffer, 72), data, 0, 72);
+            return System.Text.Encoding.Unicode.GetString(data).TrimEnd('\0');
+        } finally { Marshal.FreeHGlobal(buffer); handle.Dispose(); }
+    }
+}
+'@
+        $gptName = [RestorPartitionName]::Read('\\.\' + $lockLetter + ':')
+        if ($gptName -ne 'LOCKPICK-EFI') {
+            throw ("Nom LOCKPICK-EFI absent. FAT=[" + $lockFat + "] GPT=[" + $gptName + "]")
+        }
+    }
 
     $checks = [ordered]@{
         'rEFInd'          = Join-Path $r 'EFI\BOOT\BOOTX64.EFI'
@@ -83,6 +135,13 @@ try {
         'boot.wim'        = Join-Path $tools 'WinPE\RescueGrid\boot.wim'
         'boot.sdi'        = Join-Path $tools 'WinPE\RescueGrid\boot.sdi'
         'RescueGrid desktop' = Join-Path $tools 'RescueGrid\agent\windows\Setup-WinPEDesktop.ps1'
+        'lockpick.png'    = Join-Path $r 'EFI\BOOT\themes\restor-pc\assets\lockpick.png'
+        'LOCKPICK BOOTX64' = Join-Path $lock 'EFI\BOOT\BOOTX64.EFI'
+        'LOCKPICK EFI BCD' = Join-Path $lock 'EFI\Microsoft\Boot\BCD'
+        'LOCKPICK boot BCD' = Join-Path $lock 'boot\BCD'
+        'LOCKPICK boot.sdi' = Join-Path $lock 'boot\boot.sdi'
+        'LOCKPICK boot.wim' = Join-Path $lock 'sources\boot.wim'
+        'LOCKPICK exe'    = Join-Path $lock 'Programs\Lockpick\Lockpick.exe'
     }
 
     $failed = $false
@@ -101,14 +160,21 @@ try {
     if (Test-Path -LiteralPath $configPath) {
         $configText = Get-Content -LiteralPath $configPath -Raw
     }
-    foreach ($entryName in @('WIN CODE', 'WIN VESTY', 'MEMTEST86+', 'RESCUEGRID')) {
-        $present = $configText.Contains('menuentry "' + $entryName + '"')
+    foreach ($entryName in @('WIN CODE', 'WIN VESTY', 'MEMTEST86+', 'RESCUEGRID', 'LOCKPICK')) {
+        $present = ([regex]::Matches($configText, [regex]::Escape('menuentry "' + $entryName + '"'))).Count -eq 1
         if (-not $present) { $failed = $true }
         [pscustomobject]@{
             Check = ('refind ' + $entryName)
             Status = if ($present) { 'OK' } else { 'MISSING' }
             Path = $configPath
         }
+    }
+    $lockEntryOk = $configText.Contains('volume "LOCKPICK-EFI"') -and $configText.Contains('loader \EFI\BOOT\BOOTX64.EFI')
+    if (-not $lockEntryOk) { $failed = $true }
+    [pscustomobject]@{
+        Check = 'LOCKPICK loader'
+        Status = if ($lockEntryOk) { 'OK' } else { 'MISSING' }
+        Path = $configPath
     }
 
     $bcdPath = Join-Path $rescue 'EFI\Microsoft\Boot\BCD'

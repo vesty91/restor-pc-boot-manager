@@ -14,10 +14,12 @@ NVMe RESTOR-PC
    +-- CODE-EFI      EFI 512 Mio    -> BCD dédié WIN CODE
    +-- VESTY-EFI     EFI 512 Mio    -> BCD dédié WIN VESTY
    +-- RESTOR-TOOLS  NTFS 64 Gio    -> outils / ISO / WinPE
+   +-- RESCUE-EFI    EFI 512 Mio    -> boot RescueGrid
+   +-- LOCKPICK-EFI  EFI 1 Gio      -> média Lockpick complet
    +-- espace libre                 -> Linux plus tard
 ```
 
-Le menu rEFInd affiche actuellement : **WIN CODE**, **WIN VESTY** et **MEMTEST86+**.
+Le menu rEFInd affiche : **WIN CODE**, **WIN VESTY**, **MEMTEST86+**, **RESCUEGRID** et **LOCKPICK**.
 
 WIN CODE et WIN VESTY possèdent chacun leur propre partition EFI et leur propre BCD avec `timeout 0`. Le menu bleu Windows intermédiaire n'est donc plus nécessaire.
 
@@ -29,6 +31,8 @@ Le thème Restor-PC utilise un fond personnalisé, des icônes 176×176 dédiée
 theme/restor-pc/assets/win_code.png
 theme/restor-pc/assets/win_vesty.png
 theme/restor-pc/assets/memtest86plus.png
+theme/restor-pc/assets/rescuegrid.png
+theme/restor-pc/assets/lockpick.png
 ```
 
 ## Configuration rEFInd
@@ -44,6 +48,8 @@ scripts/
   Update-RestorBootMenu.ps1
   Test-RestorBootManager.ps1
   Backup-RestorBootManager.ps1
+  Install-RescueGridWinPE.ps1
+  Install-Lockpick.ps1
 ```
 
 ### Validation

@@ -24,6 +24,17 @@ NVMe RESTOR-PC
    |      BCD -> WIN VESTY uniquement
    |
    +-- Partition 5 : RESTOR-TOOLS    64 Gio  NTFS
+   |      WinPE\RescueGrid\boot.wim
+   |      RescueGrid\
+   |
+   +-- Partition 6 : RESCUE-EFI     512 Mio  FAT32 / ESP
+   |      EFI/Microsoft/Boot/bootmgfw.efi
+   |      BCD -> RESTOR-PC RESCUEGRID
+   |
+   +-- Partition 7 : LOCKPICK-EFI     1 Gio  FAT32 / ESP
+   |      EFI/BOOT/BOOTX64.EFI        <- chargeur original Lockpick
+   |      sources/boot.wim
+   |      Programs/Lockpick/
    |
    +-- espace non alloué                    réservé pour Linux
 ```
@@ -45,6 +56,14 @@ La configuration utilise `scanfor manual`. Toutes les entrées importantes sont 
 ## MemTest86+
 
 Le chargeur x86_64 est placé sur RESTOR-BOOT sous `\EFI\TOOLS\MEMTEST\mt86plus.efi` et lancé directement par rEFInd.
+
+## RescueGrid
+
+`RESCUE-EFI` contient uniquement le gestionnaire de démarrage Windows de RescueGrid. Le `boot.wim` reste sur `RESTOR-TOOLS`.
+
+## Lockpick
+
+`LOCKPICK-EFI` reçoit la copie intégrale de `Lockpick.iso`. rEFInd chaîne directement `\EFI\BOOT\BOOTX64.EFI` sur le volume `LOCKPICK-EFI`. Le BCD et le WIM d'origine ne sont pas reconstruits.
 
 ## Linux futur
 
