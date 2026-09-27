@@ -207,7 +207,7 @@ function Test-RestorBackupIntegrity {
 
         foreach ($required in @(Get-RestorRequiredBackupRelativePath)) {
             $requiredFull = Join-Path $root $required
-            if (-not (Test-Path -LiteralPath $requiredFull)) {
+            if (-not (Test-Path -LiteralPath $requiredFull -PathType Leaf)) {
                 $structureFailures.Add($required)
                 $failures.Add('Structure absente : ' + $required)
             }

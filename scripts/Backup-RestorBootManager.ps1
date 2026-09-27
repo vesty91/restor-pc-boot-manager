@@ -386,7 +386,7 @@ if ($MyInvocation.InvocationName -ne '.') {
             'ESP\RESTOR-BOOT\EFI\BOOT\refind.conf',
             'ESP\RESTOR-BOOT\EFI\BOOT\themes\restor-pc\assets\win_vesty.png'
         )) {
-            if (-not (Test-Path -LiteralPath (Join-Path $backup $required))) { Add-ErrorText ("Fichier critique absent de la copie : " + $required) }
+            if (-not (Test-Path -LiteralPath (Join-Path $backup $required) -PathType Leaf)) { Add-ErrorText ("Fichier critique absent de la copie : " + $required) }
         }
 
         Get-Disk -Number $script:DiskNumber | Format-List * | Out-File (Join-Path $backup 'Metadata\Get-Disk.txt') -Encoding utf8

@@ -125,4 +125,14 @@ Describe 'Test-RestorBackupIntegrity' {
         $result.Valid | Should -BeFalse
         @($result.DuplicateEntries).Count | Should -BeGreaterOrEqual 1
     }
+
+    It 'refuse un repertoire qui usurpe un chemin critique leaf' {
+        $root = New-RestorTestGoldenBackup -Root (Join-Path $TestDrive 'dir-as-leaf') -RepoRoot $script:RepoRoot
+        $target = Join-Path $root 'ESP\CODE-EFI\EFI\Microsoft\Boot\bootmgfw.efi'
+        Remove-Item -LiteralPath $target -Force
+        New-Item -ItemType Directory -Path $target -Force | Out-Null
+        $result = Test-RestorBackupIntegrity -BackupPath $root
+        $result.Valid | Should -BeFalse
+        @($result.StructureFailures) | Should -Contain 'ESP\CODE-EFI\EFI\Microsoft\Boot\bootmgfw.efi'
+    }
 }
