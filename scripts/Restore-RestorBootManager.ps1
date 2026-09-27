@@ -193,20 +193,49 @@ try {
     }
     Write-Step 'OK' 'Golden Backup integrity unchanged'
     $robocopyResults = New-Object System.Collections.ArrayList
-    foreach ($target in $targets) {
-        & robocopy.exe (Join-Path $root ("ESP\" + $target)) ($chosen[$target].Letter + ':\') '/E' '/COPY:DAT' '/DCOPY:DAT' '/R:2' '/W:1' '/XJ' | Out-Null
-        $copyCode = $LASTEXITCODE
-        [void]$robocopyResults.Add([pscustomobject]@{ Target = $target; ExitCode = $copyCode; Phase = 'Golden' })
-        if ($copyCode -ge 8) { throw ("Copie de restauration échouée pour {0}. Le pré-backup est dans {1}." -f $target, $preRoot) }
-        Write-Step 'OK' ("Fichiers restaurés : " + $target)
-    }
     $checks = New-Object System.Collections.ArrayList
     $missingAll = New-Object System.Collections.Generic.List[string]
     $mismatchAll = New-Object System.Collections.Generic.List[string]
     $filesExpected = 0
     $filesVerified = 0
     $extraPreserved = 0
+    $reportPath = Join-Path $preRoot 'RESTORE-RESULT.json'
+    $utf8Report = New-Object System.Text.UTF8Encoding $false
+    function Write-RestorFailedReport {
+        param(
+            [Parameter(Mandatory)][string]$Reason,
+            [string]$FailingTarget = ''
+        )
+        $report = [ordered]@{
+            Version               = '1.3.0'
+            StartedAt             = $restoreStarted.ToString('o')
+            FinishedAt            = (Get-Date).ToString('o')
+            BackupPath            = $root
+            BackupManifestSha256  = $integrityManifestHash
+            Targets               = @($targets)
+            PreRestorePath        = $preRoot
+            FilesExpected         = $filesExpected
+            FilesVerified         = $filesVerified
+            MissingFiles          = @($missingAll.ToArray())
+            HashMismatches        = @($mismatchAll.ToArray())
+            ExtraFilesPreserved   = $extraPreserved
+            RobocopyResults       = @($robocopyResults.ToArray())
+            FailingTarget         = $FailingTarget
+            FailureReason         = $Reason
+            Status                = 'FAILED'
+        }
+        [IO.File]::WriteAllText($reportPath, ($report | ConvertTo-Json -Depth 6), $utf8Report)
+        Write-Step 'ERROR' ("RESTORE-RESULT.json écrit : " + $reportPath)
+    }
     foreach ($target in $targets) {
+        & robocopy.exe (Join-Path $root ("ESP\" + $target)) ($chosen[$target].Letter + ':\') '/E' '/COPY:DAT' '/DCOPY:DAT' '/R:2' '/W:1' '/XJ' | Out-Null
+        $copyCode = $LASTEXITCODE
+        [void]$robocopyResults.Add([pscustomobject]@{ Target = $target; ExitCode = $copyCode; Phase = 'Golden' })
+        if ($copyCode -ge 8) {
+            Write-RestorFailedReport -Reason ("Robocopy failed for " + $target) -FailingTarget $target
+            throw ("Copie de restauration échouée pour {0}. Le pré-backup est dans {1}." -f $target, $preRoot)
+        }
+        Write-Step 'OK' ("Fichiers restaurés : " + $target)
         $destination = $chosen[$target].Letter + ':\'
         $check = Test-RestorRestoredTarget -TargetName $target -DestinationRoot $destination -ManifestSnapshot $manifestSnapshot
         [void]$checks.Add($check)
@@ -215,6 +244,13 @@ try {
         $extraPreserved += [int]$check.ExtraFilesPreserved
         foreach ($item in @($check.MissingFiles)) { if (-not [string]::IsNullOrWhiteSpace([string]$item)) { $missingAll.Add($target + '\' + $item) } }
         foreach ($item in @($check.HashMismatches)) { if (-not [string]::IsNullOrWhiteSpace([string]$item)) { $mismatchAll.Add($target + '\' + $item) } }
+        if (-not $check.Valid) {
+            Write-RestorFailedReport -Reason ("Post-copy verification failed for " + $target) -FailingTarget $target
+            Write-Step 'ERROR' 'Post-restore verification failed'
+            Write-Step 'ERROR' ("Aucune restauration automatique du contenu précédent. Pré-backup : " + $preRoot)
+            throw ("Post-restore verification failed for {0}. Le pré-backup est dans {1}." -f $target, $preRoot)
+        }
+        Write-Step 'OK' ("Vérification post-copie valide : " + $target)
     }
     $restoreValid = ($missingAll.Count -eq 0) -and ($mismatchAll.Count -eq 0)
     foreach ($check in @($checks)) { if (-not $check.Valid) { $restoreValid = $false } }
@@ -235,8 +271,6 @@ try {
         RobocopyResults       = @($robocopyResults.ToArray())
         Status                = $reportStatus
     }
-    $reportPath = Join-Path $preRoot 'RESTORE-RESULT.json'
-    $utf8Report = New-Object System.Text.UTF8Encoding $false
     [IO.File]::WriteAllText($reportPath, ($report | ConvertTo-Json -Depth 6), $utf8Report)
     if (-not $restoreValid) {
         Write-Step 'ERROR' 'Post-restore verification failed'
