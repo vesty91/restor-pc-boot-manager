@@ -21,6 +21,7 @@ function Get-RestorRequiredBackupRelativePath {
         'ESP\RESCUE-EFI\EFI\Microsoft\Boot\bootmgfw.efi',
         'ESP\LOCKPICK-EFI\EFI\BOOT\BOOTX64.EFI',
         'ESP\LOCKPICK-EFI\EFI\Microsoft\Boot\BCD',
+        'ESP\LOCKPICK-EFI\boot\BCD',
         'ESP\LOCKPICK-EFI\boot\boot.sdi',
         'ESP\LOCKPICK-EFI\sources\boot.wim',
         'ESP\LOCKPICK-EFI\Programs\Lockpick\Lockpick.exe',

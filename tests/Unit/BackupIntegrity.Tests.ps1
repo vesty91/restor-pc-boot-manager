@@ -163,6 +163,15 @@ Describe 'Test-RestorBackupIntegrity' {
         @($result.StructureFailures) | Should -Contain 'ESP\LOCKPICK-EFI\Programs\Lockpick\Lockpick.exe'
     }
 
+    It 'refuse un Golden Backup sans Lockpick boot BCD' {
+        $root = New-RestorTestGoldenBackup -Root (Join-Path $TestDrive 'no-lockpick-boot-bcd') -RepoRoot $script:RepoRoot
+        $target = Join-Path $root 'ESP\LOCKPICK-EFI\boot\BCD'
+        Remove-Item -LiteralPath $target -Force
+        $result = Test-RestorBackupIntegrity -BackupPath $root
+        $result.Valid | Should -BeFalse
+        @($result.StructureFailures) | Should -Contain 'ESP\LOCKPICK-EFI\boot\BCD'
+    }
+
     It 'refuse un Golden Backup sans scripts RescueGrid' {
         $root = New-RestorTestGoldenBackup -Root (Join-Path $TestDrive 'no-rescuegrid-script') -RepoRoot $script:RepoRoot
         $target = Join-Path $root 'RESTOR-TOOLS\RescueGrid\Project\agent\windows\Start-RescueGrid.ps1'

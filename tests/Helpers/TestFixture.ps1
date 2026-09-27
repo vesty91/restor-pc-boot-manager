@@ -81,6 +81,7 @@ function New-RestorTestGoldenBackup {
         'ESP\RESCUE-EFI\EFI\Microsoft\Boot\bootmgfw.efi' = 'TEST EFI FILE RESCUE'
         'ESP\LOCKPICK-EFI\EFI\BOOT\BOOTX64.EFI' = 'TEST EFI FILE LOCKPICK'
         'ESP\LOCKPICK-EFI\EFI\Microsoft\Boot\BCD' = 'TEST LOCKPICK EFI BCD'
+        'ESP\LOCKPICK-EFI\boot\BCD' = 'TEST LOCKPICK BOOT BCD'
         'ESP\LOCKPICK-EFI\boot\boot.sdi' = 'TEST LOCKPICK BOOT SDI'
         'ESP\LOCKPICK-EFI\sources\boot.wim' = 'TEST LOCKPICK BOOT WIM'
         'ESP\LOCKPICK-EFI\Programs\Lockpick\Lockpick.exe' = 'TEST LOCKPICK EXE'
