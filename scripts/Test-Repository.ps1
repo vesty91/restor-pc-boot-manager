@@ -42,6 +42,7 @@ $workflowPath = Join-Path $repoRoot '.github\workflows\ci.yml'
 $docPaths = @(
     'CHANGELOG.md',
     'docs\releases\v1.1.0.md',
+    'docs\releases\v1.2.0.md',
     'docs\BACKUP-RESTORE.md',
     'Lockpick\README.md',
     'README.md',
@@ -57,7 +58,8 @@ foreach ($relative in $docPaths) {
 if (Test-Path -LiteralPath $readmePath -PathType Leaf) {
     $readme = Get-Content -LiteralPath $readmePath -Raw
     $readmeNeedles = @(
-        'Latest stable release: v1.1.0',
+        'Latest stable release: v1.2.0',
+        'docs/releases/v1.2.0.md',
         'docs/releases/v1.1.0.md',
         'docs/BACKUP-RESTORE.md',
         'Lockpick/README.md',

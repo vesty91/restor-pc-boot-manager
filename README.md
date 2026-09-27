@@ -2,7 +2,7 @@
 
 [![RESTOR-PC CI](https://github.com/vesty91/restor-pc-boot-manager/actions/workflows/ci.yml/badge.svg)](https://github.com/vesty91/restor-pc-boot-manager/actions/workflows/ci.yml)
 
-Latest stable release: v1.1.0
+Latest stable release: v1.2.0
 
 Boot manager UEFI graphique basé sur rEFInd, installé sur un NVMe dédié et conçu pour démarrer directement deux installations Windows indépendantes, avec des outils de diagnostic.
 
@@ -62,6 +62,11 @@ scripts/
   build-test-disk.ps1
   test-boot.ps1
   Test-Repository.ps1
+  Test-Behavior.ps1
+  Test-VirtualRestore.ps1
+  Test-VirtualLabSafety.ps1
+  New-RestorVirtualLab.ps1
+  Get-RestorVirtualLab.ps1
 ```
 
 ## QEMU testing
@@ -96,38 +101,58 @@ Le binaire rEFInd n'est pas versionné. Placez la publication officielle 0.14.2 
 .\scripts\Restore-RestorBootManager.ps1 -BackupPath "C:\RESTOR-PC-BACKUP\v1.1.0-GOLDEN-..." -RestorBoot
 ```
 
-La dernière commande est un dry-run. Le détail est dans `docs/BACKUP-RESTORE.md`.
+La dernière commande est un dry-run. `-PreRestoreRoot` existe, mais son défaut reste `C:\RESTOR-PC-BACKUP`. Le dossier de sauvegarde réel reste celui du Golden Backup v1.1.0 : le format interne n'a pas changé en v1.2.0. Ne pas lancer `-Apply` sur le NVMe pour valider cette release. La preuve d'écriture a été faite sur un VHDX isolé. Le détail est dans `docs/BACKUP-RESTORE.md`.
+
+> [!CAUTION]
+> La commande suivante écrit réellement sur la partition cible. Elle n'est pas une étape de validation de la release.
+
+```powershell
+.\scripts\Restore-RestorBootManager.ps1 `
+  -BackupPath "C:\RESTOR-PC-BACKUP\v1.1.0-GOLDEN-..." `
+  -RestorBoot `
+  -Apply `
+  -ConfirmRestore "RESTOR-PC"
+```
 
 ## CI / Validation
 
-Validation locale :
+La validation a trois niveaux. Les niveaux 2 et 3 n'utilisent jamais le NVMe physique.
+
+1. **Static** : syntaxe, PSScriptAnalyzer et contrôles de sûreté du dépôt.
+2. **Pester offline** : fixtures synthétiques et mocks, sans disque.
+3. **VHD integration** : `Restore -Apply` sur un VHDX isolé, en administrateur, hors CI.
 
 ```powershell
 pwsh -NoProfile -File .\scripts\Test-Repository.ps1
+pwsh -NoProfile -File .\scripts\Test-Behavior.ps1
 ```
 
-GitHub Actions : **RESTOR-PC CI** (`.github/workflows/ci.yml`).
+PowerShell administrateur, laboratoire VHDX :
 
-La CI ne touche jamais au matériel, ne monte pas de disque physique, ne lance pas QEMU et ne lance pas `Restore -Apply`.
+```powershell
+pwsh -NoProfile -File .\scripts\Test-VirtualRestore.ps1
+pwsh -NoProfile -File .\scripts\Test-VirtualRestore.ps1 -KeepLab
+```
+
+`-KeepLab` démonte le VHDX et conserve les fichiers du laboratoire. Sans ce commutateur, le dossier `test\vhd\restore-lab` est supprimé seulement si le chemin résolu est exactement celui du lab et si les tests ont réussi.
+
+GitHub Actions : **RESTOR-PC CI** (`.github/workflows/ci.yml`). Le check requis sur `main` est `Repository validation`.
+
+La CI ne touche jamais au matériel, ne monte pas de disque physique, ne lance pas QEMU, ne lance pas les tests marqués `VHD` et ne lance pas `Restore -Apply`.
 
 `Write-Host` reste le canal des lignes `[OK]`, `[WARN]` et `[ERROR]`. Les noms de fonctions internes au pluriel ne sont pas renommés. Les scripts PowerShell Unicode sont en UTF-8 avec BOM, pour Windows PowerShell et PowerShell 7. Les portes bloquantes sont dans `config/PSScriptAnalyzerSettings.psd1` : catch vide, variable automatique écrasée, paramètre inutilisé.
 
 ## Automated tests
 
-Pester, fixtures offline, mocks materiel.
+Pester 5.9.1, fixtures offline, mocks matériel.
 
 The test suite never accesses physical disks.
 
-Le laboratoire VHDX, lance a part en administrateur, est decrit dans `docs/VIRTUAL-RESTORE-LAB.md`.
-
-```powershell
-pwsh -NoProfile -File .\scripts\Test-Behavior.ps1
-```
-
-Le detail est dans `tests/README.md`.
+Le laboratoire VHDX est décrit dans `docs/VIRTUAL-RESTORE-LAB.md`. Le détail des tests offline est dans `tests/README.md`.
 
 ## Releases
 
+- [v1.2.0](docs/releases/v1.2.0.md)
 - [v1.1.0](docs/releases/v1.1.0.md)
 - [Backup et restauration](docs/BACKUP-RESTORE.md)
 - [Lockpick](Lockpick/README.md) : `Lockpick.iso` n'est pas distribué par ce dépôt.

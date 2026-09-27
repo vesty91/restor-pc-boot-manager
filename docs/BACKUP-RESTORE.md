@@ -42,7 +42,7 @@ Sans les deux paramètres d'écriture, la commande reste une simulation :
 
 Les cibles sont indépendantes : `-RestorBoot`, `-CodeEfi`, `-VestyEfi`, `-RescueEfi`, `-LockpickEfi`, `-AllEfi`. `-RestorBoot` ne touche pas les autres ESP.
 
-L'écriture réelle exige les deux paramètres :
+L'écriture réelle exige les deux paramètres. `ConfirmRestore` est comparé avec `-ceq` : la valeur doit être exactement `RESTOR-PC`. `restor-pc` ne suffit pas. `-Apply` seul ne suffit pas.
 
 ```powershell
 .\scripts\Restore-RestorBootManager.ps1 `
@@ -52,9 +52,31 @@ L'écriture réelle exige les deux paramètres :
   -ConfirmRestore "RESTOR-PC"
 ```
 
-Avant d'écrire, le script vérifie l'administrateur, le modèle, le numéro de série, le GPT, le manifeste, le statut `VALID`, puis la taille et le type GPT de la partition existante. Il crée `C:\RESTOR-PC-BACKUP\PRE-RESTORE-YYYYMMDD-HHMMSS\` et abandonne si cette copie échoue.
+`-PreRestoreRoot` choisit le dossier parent du pré-backup. Le défaut est `C:\RESTOR-PC-BACKUP`. Un chemin vide, une racine de lecteur, `Windows` ou `System32` sont refusés. Le laboratoire VHD redirige ce paramètre sous `test\vhd\restore-lab`. En production, le défaut n'a pas changé.
+
+Avant d'écrire, le script vérifie l'administrateur, le modèle, le numéro de série, le GPT, le hash du fichier `SHA256-MANIFEST.txt` contre `ManifestSha256`, le statut `VALID`, puis la taille et le type GPT de la partition existante. Il ne recalcule pas le hash de chaque fichier de `ESP\`. Ce contrôle fichier par fichier appartient à `Test-RestorGoldenBackup.ps1`, à lancer avant `-Apply`. Lors de l'écriture, `Restore-RestorBootManager.ps1` crée `C:\RESTOR-PC-BACKUP\PRE-RESTORE-YYYYMMDD-HHMMSS\` et abandonne si cette copie échoue. La copie Golden n'est lancée qu'après ce pré-backup.
 
 Cette version ne fait pas `Clear-Disk`, `Initialize-Disk`, `Remove-Partition`, `Resize-Partition`, `New-Partition`, `Format-Volume`, `diskpart clean`, `bcdboot` ni `bootrec`.
+
+## Compatibilité du Golden Backup v1.1.0
+
+v1.2.0 reste compatible avec un Golden Backup valide créé sous v1.1.0. `$BackupVersion` reste `1.1.0`. Les dossiers `C:\RESTOR-PC-BACKUP\v1.1.0-GOLDEN-...` ne sont pas renommés et aucun nouveau Golden Backup réel n'est fabriqué pour cette release.
+
+La restauration accepte ce backup tant que :
+
+- `BACKUP-INFO.json` a le statut `VALID` ;
+- `ManifestSha256` correspond au fichier `SHA256-MANIFEST.txt` ;
+- la structure requise est présente.
+
+La correspondance de chaque fichier avec son empreinte n'est pas refaite par `Restore-RestorBootManager.ps1`. Elle est le résultat de `Test-RestorGoldenBackup.ps1`.
+
+v1.2.0 ne recrée toujours pas un GPT perdu.
+
+## Tests
+
+La suite offline, lancée par `scripts/Test-Repository.ps1` et `scripts/Test-Behavior.ps1`, vérifie le dry-run, la confirmation et les sauvegardes synthétiques sans disque physique.
+
+L'écriture réelle de `Restore-RestorBootManager.ps1` est prouvée à part, sur un VHDX isolé, par `scripts/Test-VirtualRestore.ps1`. Ce test n'est pas exécuté par GitHub Actions. Voir `docs/VIRTUAL-RESTORE-LAB.md`.
 
 ## Partition EFI absente
 
