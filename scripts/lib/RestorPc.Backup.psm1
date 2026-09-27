@@ -8,6 +8,7 @@ Set-StrictMode -Version Latest
 $script:RestorVestyRelativePath = 'ESP\RESTOR-BOOT\EFI\BOOT\themes\restor-pc\assets\win_vesty.png'
 $script:RestorRefindRelativePath = 'ESP\RESTOR-BOOT\EFI\BOOT\refind.conf'
 $script:RestorBootWimRelativePath = 'RESTOR-TOOLS\RescueGrid\WinPE\boot.wim'
+$script:RestorBootSdiRelativePath = 'RESTOR-TOOLS\RescueGrid\WinPE\boot.sdi'
 $script:RestorDefaultVestySha256 = 'CC67BBF03D668EE61DE3A4F620C3855DF4D2430F2D2BCB473658CF1CE53331F6'
 
 function Get-RestorRequiredBackupRelativePath {
@@ -235,10 +236,14 @@ function Test-RestorBackupIntegrity {
         }
 
         $wimResolved = Resolve-RestorBackupEntryPath -BackupRoot $root -RelativePath $script:RestorBootWimRelativePath
-        if ($wimResolved.Safe -and (Test-Path -LiteralPath $wimResolved.FullPath -PathType Leaf)) {
+        $sdiResolved = Resolve-RestorBackupEntryPath -BackupRoot $root -RelativePath $script:RestorBootSdiRelativePath
+        $hasWim = $wimResolved.Safe -and (Test-Path -LiteralPath $wimResolved.FullPath -PathType Leaf)
+        $hasSdi = $sdiResolved.Safe -and (Test-Path -LiteralPath $sdiResolved.FullPath -PathType Leaf)
+        if ($hasWim -and $hasSdi) {
             $rescueGridValid = $true
         } else {
-            $failures.Add('boot.wim RescueGrid absent de la sauvegarde.')
+            if (-not $hasWim) { $failures.Add('boot.wim RescueGrid absent de la sauvegarde.') }
+            if (-not $hasSdi) { $failures.Add('boot.sdi RescueGrid absent de la sauvegarde.') }
         }
     }
 

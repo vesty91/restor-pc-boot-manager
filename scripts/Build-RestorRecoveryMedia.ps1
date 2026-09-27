@@ -158,20 +158,29 @@ if (-not [string]::IsNullOrWhiteSpace($WinPESource) -and (Test-Path -LiteralPath
     $candidateWim = Join-Path $candidateRoot 'sources\boot.wim'
     $candidateSdi = Join-Path $candidateRoot 'boot\boot.sdi'
     if ((Test-Path -LiteralPath $candidateWim -PathType Leaf) -and (Test-Path -LiteralPath $candidateSdi -PathType Leaf)) {
-        $hasPowerShell = $false
+        $hasRuntime = $false
         if ($AllowWinPeWithoutPowerShell) {
-            $hasPowerShell = $true
-            Write-Step 'WARN' 'AllowWinPeWithoutPowerShell: controle PowerShell WinPE ignore.'
+            $hasRuntime = $true
+            Write-Step 'WARN' 'AllowWinPeWithoutPowerShell: controles PowerShell/StorageWMI WinPE ignores.'
         } else {
             $mount = Join-Path ([IO.Path]::GetTempPath()) ('restor-winpe-ps-' + [guid]::NewGuid().ToString('N'))
             New-Item -ItemType Directory -Path $mount -Force | Out-Null
             try {
                 Mount-WindowsImage -ImagePath $candidateWim -Index 1 -Path $mount -ReadOnly | Out-Null
                 $psExe = Join-Path $mount 'Windows\System32\WindowsPowerShell\v1.0\powershell.exe'
+                $storageModule = Join-Path $mount 'Windows\System32\WindowsPowerShell\v1.0\Modules\Storage\Storage.psd1'
                 $hasPowerShell = Test-Path -LiteralPath $psExe -PathType Leaf
+                $hasStorage = Test-Path -LiteralPath $storageModule -PathType Leaf
+                if (-not $hasPowerShell) {
+                    Write-Step 'WARN' 'WinPE boot.wim sans runtime PowerShell.'
+                }
+                if (-not $hasStorage) {
+                    Write-Step 'WARN' 'WinPE boot.wim sans module Storage (WinPE-StorageWMI).'
+                }
+                $hasRuntime = $hasPowerShell -and $hasStorage
             } catch {
-                Write-Step 'WARN' ("Impossible de monter boot.wim pour verifier PowerShell : " + $_.Exception.Message)
-                $hasPowerShell = $false
+                Write-Step 'WARN' ("Impossible de monter boot.wim pour verifier PowerShell/Storage : " + $_.Exception.Message)
+                $hasRuntime = $false
             } finally {
                 try {
                     Dismount-WindowsImage -Path $mount -Discard -ErrorAction SilentlyContinue | Out-Null
@@ -181,11 +190,11 @@ if (-not [string]::IsNullOrWhiteSpace($WinPESource) -and (Test-Path -LiteralPath
                 Remove-Item -LiteralPath $mount -Recurse -Force -ErrorAction SilentlyContinue
             }
         }
-        if ($hasPowerShell) {
+        if ($hasRuntime) {
             $winPeMediaRoot = $candidateRoot
             $hasWinPe = $true
         } else {
-            Write-Step 'WARN' 'WinPESource refuse pour ISO: boot.wim sans runtime PowerShell. Staging conserve.'
+            Write-Step 'WARN' 'WinPESource refuse pour ISO: PowerShell et/ou StorageWMI absents. Staging conserve.'
         }
     } else {
         Write-Step 'WARN' 'WinPESource incomplete: need sources\boot.wim and boot\boot.sdi for ISO build.'

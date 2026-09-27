@@ -155,4 +155,13 @@ Describe 'Test-RestorGoldenBackup' {
         Get-RestorOutputText $result | Should -Match 'boot.wim RescueGrid absent'
         Get-RestorOutputText $result | Should -Match 'GOLDEN BACKUP INVALID'
     }
+
+    It 'refuse un backup sans boot.sdi RescueGrid' {
+        $root = New-RestorTestGoldenBackup -Root (Join-Path $TestDrive 'sdi') -RepoRoot $script:RepoRoot
+        Remove-Item -LiteralPath (Join-Path $root 'RESTOR-TOOLS\RescueGrid\WinPE\boot.sdi') -Force
+        $result = Invoke-RestorChecked -Path $script:Verifier -Parameter @{ BackupPath = $root }
+        $result.Code | Should -Not -Be 0
+        Get-RestorOutputText $result | Should -Match 'boot.sdi RescueGrid absent'
+        Get-RestorOutputText $result | Should -Match 'GOLDEN BACKUP INVALID'
+    }
 }

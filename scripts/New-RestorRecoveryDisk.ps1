@@ -520,10 +520,12 @@ try {
             throw 'Post-restore verification failed for RESTOR-TOOLS.'
         }
         if (-not (Test-Path -LiteralPath (Join-Path $toolsDest 'WinPE\RescueGrid\boot.wim') -PathType Leaf)) {
-            Write-Step 'WARN' 'WinPE\RescueGrid\boot.wim absent apres restore mappe.'
-        } else {
-            Write-Step 'OK' 'RESTOR-TOOLS restaure (layout live mappe).'
+            throw 'WinPE\RescueGrid\boot.wim absent apres restore mappe.'
         }
+        if (-not (Test-Path -LiteralPath (Join-Path $toolsDest 'WinPE\RescueGrid\boot.sdi') -PathType Leaf)) {
+            throw 'WinPE\RescueGrid\boot.sdi absent apres restore mappe.'
+        }
+        Write-Step 'OK' 'RESTOR-TOOLS restaure (layout live mappe, boot.wim + boot.sdi).'
 
         $rescueLetter = [string]$byName['RESCUE-EFI'].DriveLetter
         Update-RestorRescueGridBcd -RescueLetter $rescueLetter -ToolsLetter $toolsLetter -BackupRoot $root

@@ -87,6 +87,7 @@ function New-RestorTestGoldenBackup {
         'Metadata\REFIND-CONFIG.txt' = 'synthetic refind copy'
         'Metadata\GIT-STATE.txt' = 'synthetic'
         'RESTOR-TOOLS\RescueGrid\WinPE\boot.wim' = 'TEST BOOT WIM PLACEHOLDER'
+        'RESTOR-TOOLS\RescueGrid\WinPE\boot.sdi' = 'TEST BOOT SDI PLACEHOLDER'
     }
     foreach ($relative in $files.Keys) {
         Write-RestorTextFile -Path (Join-Path $Root $relative) -Content $files[$relative]
