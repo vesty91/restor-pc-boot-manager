@@ -237,7 +237,12 @@ try {
         }
         Write-Step 'OK' ("Fichiers restaurés : " + $target)
         $destination = $chosen[$target].Letter + ':\'
-        $check = Test-RestorRestoredTarget -TargetName $target -DestinationRoot $destination -ManifestSnapshot $manifestSnapshot
+        try {
+            $check = Test-RestorRestoredTarget -TargetName $target -DestinationRoot $destination -ManifestSnapshot $manifestSnapshot
+        } catch {
+            Write-RestorFailedReport -Reason ("Post-copy verification exception for " + $target + ' : ' + $_.Exception.Message) -FailingTarget $target
+            throw
+        }
         [void]$checks.Add($check)
         $filesExpected += [int]$check.FilesExpected
         $filesVerified += [int]$check.FilesVerified
