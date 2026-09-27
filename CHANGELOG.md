@@ -1,5 +1,54 @@
 # Changelog
 
+## [1.2.0] - 2026-09-27
+
+Release de durcissement et de validation. Le menu rEFInd et l'architecture de boot validés en v1.1.0 ne changent pas. Le format interne du Golden Backup reste `1.1.0` : `$BackupVersion` dans `Backup-RestorBootManager.ps1` n'est pas modifié, et aucun nouveau Golden Backup réel n'est produit.
+
+### Added
+
+- Workflow GitHub Actions **RESTOR-PC CI** (`.github/workflows/ci.yml`), job requis `Repository validation`.
+- Scripts de validation du dépôt : `scripts/Test-Repository.ps1`, `scripts/Test-Behavior.ps1`, `scripts/Test-PowerShellSyntax.ps1`, `scripts/Test-RestoreSafety.ps1`.
+- Réglages PSScriptAnalyzer dans `config/PSScriptAnalyzerSettings.psd1`.
+- Pester 5.9.1 et PSScriptAnalyzer 1.25.0, versions figées dans `config/ToolVersions.psd1`.
+- Tests Golden Backup synthétiques et tests Restore en dry-run.
+- Laboratoire VHDX isolé : `scripts/New-RestorVirtualLab.ps1`, `scripts/Get-RestorVirtualLab.ps1`, `scripts/Test-VirtualRestore.ps1`, `scripts/Test-VirtualLabSafety.ps1`.
+- Documentation `docs/VIRTUAL-RESTORE-LAB.md`.
+
+### Changed
+
+- La confirmation Restore est strictement sensible à la casse : seule la valeur `RESTOR-PC` autorise l'écriture avec `-Apply`.
+- `-PreRestoreRoot` est configurable. Le défaut production reste `C:\RESTOR-PC-BACKUP`.
+- `actions/checkout` est passé à `v7`.
+- Les versions des outils de test sont épinglées et installées avec `-RequiredVersion`.
+- `main` est protégée par le check requis `Repository validation`.
+
+### Fixed
+
+- Analyse PowerShell cassée par des apostrophes typographiques dans des chaînes.
+- Warnings bloquants PSScriptAnalyzer (catch vide, variable automatique écrasée, paramètre inutilisé).
+- `-KeepExisting` réutilise un VHDX déjà valide au lieu de recréer ses partitions.
+
+### Testing
+
+- Phase 5 : 67 tests au départ de la suite offline.
+- Phase 6 finale : 78 tests découverts.
+- CI offline : 73 tests exécutés, 73 réussis, 0 en échec. Les 5 tests marqués `VHD` ne tournent pas sur GitHub Actions.
+- Laboratoire VHD local : 5/5 réussis.
+- Couverture observée sur cette release : 62.7 %. Ce chiffre décrit l'exécution mesurée. Il n'est pas un seuil futur.
+
+### Safety
+
+- Dry-run par défaut.
+- `-Apply` seul est insuffisant.
+- La confirmation exacte `RESTOR-PC` est obligatoire pour écrire.
+- Un Golden Backup invalide est refusé.
+- `ManifestSha256` est validé.
+- Le VHDX du laboratoire est associé explicitement, via `Get-DiskImage -ImagePath | Get-Disk` et `Assert-RestorVirtualLabDisk`, avant toute opération destructive du lab.
+- Un disque `IsBoot` ou `IsSystem` est refusé dans le lab.
+- Le modèle physique `SAMSUNG MZVLB256HAHQ-000L2` est bloqué dans le lab.
+- Aucun test VHD n'est hébergé dans GitHub Actions.
+- Aucune reconstruction GPT de production n'est automatique.
+
 ## [1.1.0] - 2026-09-27
 
 ### Added
