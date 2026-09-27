@@ -247,6 +247,16 @@ function New-RestorRecoveryPartition {
     }
     Start-Sleep -Milliseconds 400
     $partitionNumber = [int]$partition.PartitionNumber
+    $record = [pscustomobject]@{
+        Name            = $Name
+        Label           = $Label
+        DriveLetter     = ''
+        PartitionNumber = $partitionNumber
+        Size            = [int64]$partition.Size
+        GptType         = [string]$partition.GptType
+        FileSystem      = ''
+    }
+    [void]$script:PartitionsCreated.Add($record)
     $letter = ''
     if ($null -ne $partition.PSObject.Properties['DriveLetter'] -and $null -ne $partition.DriveLetter) {
         $rawLetter = [string]$partition.DriveLetter
@@ -282,27 +292,15 @@ function New-RestorRecoveryPartition {
         }
         Set-RestorRecoveryGptName -Letter $letter -Name $Name -ExpectedGptType $GptType
         $volume = Get-Volume -DriveLetter $letter
-        [void]$script:PartitionsCreated.Add([pscustomobject]@{
-            Name            = $Name
-            Label           = [string]$volume.FileSystemLabel
-            DriveLetter     = $letter.ToUpperInvariant()
-            PartitionNumber = [int]$partition.PartitionNumber
-            Size            = [int64]$partition.Size
-            GptType         = [string]$partition.GptType
-            FileSystem      = [string]$volume.FileSystem
-        })
+        $record.Label = [string]$volume.FileSystemLabel
+        $record.DriveLetter = $letter.ToUpperInvariant()
+        $record.PartitionNumber = [int]$partition.PartitionNumber
+        $record.Size = [int64]$partition.Size
+        $record.GptType = [string]$partition.GptType
+        $record.FileSystem = [string]$volume.FileSystem
         Write-Step 'OK' ("{0} {1}: {2} {3}" -f $Name, $letter.ToUpperInvariant(), $volume.FileSystem, $volume.FileSystemLabel)
         return
     }
-    [void]$script:PartitionsCreated.Add([pscustomobject]@{
-        Name            = $Name
-        Label           = $Label
-        DriveLetter     = ''
-        PartitionNumber = [int]$partition.PartitionNumber
-        Size            = [int64]$partition.Size
-        GptType         = [string]$partition.GptType
-        FileSystem      = ''
-    })
     Write-Step 'OK' ("{0} cree (MSR)" -f $Name)
 }
 
