@@ -42,4 +42,9 @@ Describe 'Build-RestorRecoveryMedia staging' {
         $sibling = $script:RepoRoot.TrimEnd('\') + '-backup'
         { & $script:Builder -OutputRoot $sibling } | Should -Throw
     }
+
+    It 'refuse un OutputRoot hors de artifacts' {
+        $underScripts = Join-Path $script:RepoRoot 'scripts\recovery-media-out'
+        { & $script:Builder -OutputRoot $underScripts } | Should -Throw
+    }
 }

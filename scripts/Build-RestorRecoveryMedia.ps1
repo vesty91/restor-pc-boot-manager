@@ -28,6 +28,13 @@ if ($outNormalized.Equals($repoFull, [StringComparison]::OrdinalIgnoreCase)) {
 if (-not $outNormalized.StartsWith($boundary, [StringComparison]::OrdinalIgnoreCase)) {
     throw 'OutputRoot doit rester sous la racine du depot.'
 }
+$artifactsFull = [IO.Path]::GetFullPath((Join-Path $repoRoot 'artifacts')).TrimEnd('\')
+$artifactsBoundary = $artifactsFull + [IO.Path]::DirectorySeparatorChar
+$underArtifacts = $outNormalized.Equals($artifactsFull, [StringComparison]::OrdinalIgnoreCase) -or
+    $outNormalized.StartsWith($artifactsBoundary, [StringComparison]::OrdinalIgnoreCase)
+if (-not $underArtifacts) {
+    throw 'OutputRoot doit rester sous artifacts\ (sortie generee uniquement).'
+}
 
 function Write-Step {
     param([string]$Level, [string]$Message)
@@ -40,6 +47,12 @@ function Get-RestorFileSha256 {
 }
 
 if (Test-Path -LiteralPath $out) {
+    $children = @(Get-ChildItem -LiteralPath $out -Force -ErrorAction Stop)
+    $hasGeneratedMarker = (Test-Path -LiteralPath (Join-Path $out 'staging') -PathType Container) -or
+        (Test-Path -LiteralPath (Join-Path $out 'SHA256SUMS.txt') -PathType Leaf)
+    if ($children.Count -gt 0 -and -not $hasGeneratedMarker) {
+        throw ("OutputRoot existant refuse sans marqueur de sortie generee (staging/ ou SHA256SUMS.txt) : " + $out)
+    }
     Remove-Item -LiteralPath $out -Recurse -Force
 }
 $staging = Join-Path $out 'staging'

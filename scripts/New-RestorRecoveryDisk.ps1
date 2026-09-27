@@ -118,14 +118,16 @@ function Update-RestorRescueGridBcd {
         $guidMatch = [regex]::Match($createdText, '\{[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}\}')
         if (-not $guidMatch.Success) { throw 'GUID RESTOR-PC RESCUEGRID introuvable apres create.' }
         $guid = $guidMatch.Value
-        Invoke-RestorRecoveryBcd ("/store `"{0}`" /set {1} path \Windows\System32\Boot\winload.efi" -f $store, $guid) | Out-Null
-        Invoke-RestorRecoveryBcd ("/store `"{0}`" /set {1} systemroot \Windows" -f $store, $guid) | Out-Null
-        Invoke-RestorRecoveryBcd ("/store `"{0}`" /set {1} winpe yes" -f $store, $guid) | Out-Null
-        Invoke-RestorRecoveryBcd ("/store `"{0}`" /set {1} detecthal yes" -f $store, $guid) | Out-Null
-        Invoke-RestorRecoveryBcd ("/store `"{0}`" /displayorder {1} /addlast" -f $store, $guid) | Out-Null
-        Invoke-RestorRecoveryBcd ("/store `"{0}`" /default {1}" -f $store, $guid) | Out-Null
-        Invoke-RestorRecoveryBcd ("/store `"{0}`" /timeout 0" -f $store) | Out-Null
     }
+
+    # Canonical loader + bootmgr settings for both existing and newly created entries.
+    Invoke-RestorRecoveryBcd ("/store `"{0}`" /set {1} path \Windows\System32\Boot\winload.efi" -f $store, $guid) | Out-Null
+    Invoke-RestorRecoveryBcd ("/store `"{0}`" /set {1} systemroot \Windows" -f $store, $guid) | Out-Null
+    Invoke-RestorRecoveryBcd ("/store `"{0}`" /set {1} winpe yes" -f $store, $guid) | Out-Null
+    Invoke-RestorRecoveryBcd ("/store `"{0}`" /set {1} detecthal yes" -f $store, $guid) | Out-Null
+    Invoke-RestorRecoveryBcd ("/store `"{0}`" /displayorder {1} /addlast" -f $store, $guid) | Out-Null
+    Invoke-RestorRecoveryBcd ("/store `"{0}`" /default {1}" -f $store, $guid) | Out-Null
+    Invoke-RestorRecoveryBcd ("/store `"{0}`" /timeout 0" -f $store) | Out-Null
 
     $wimArg = ("ramdisk=[{0}:]\WinPE\RescueGrid\boot.wim,{{ramdiskoptions}}" -f $ToolsLetter)
     Invoke-RestorRecoveryBcd ("/store `"{0}`" /set {1} device {2}" -f $store, $guid, $wimArg) | Out-Null
@@ -135,8 +137,17 @@ function Update-RestorRescueGridBcd {
     if ($LASTEXITCODE -ne 0 -or $entryProbe -notmatch 'RESTOR-PC RESCUEGRID') {
         throw ("BCD RescueGrid : l entree {0} n est pas RESTOR-PC RESCUEGRID." -f $guid)
     }
-    if ($entryProbe -notmatch [regex]::Escape('\WinPE\RescueGrid\boot.wim')) {
-        throw ("BCD RescueGrid : boot.wim absent de l entree {0}." -f $guid)
+    foreach ($token in @(
+            '\Windows\System32\Boot\winload.efi',
+            '\Windows',
+            '\WinPE\RescueGrid\boot.wim'
+        )) {
+        if ($entryProbe -notmatch [regex]::Escape($token)) {
+            throw ("BCD RescueGrid : jeton canonique absent de {0} : {1}" -f $guid, $token)
+        }
+    }
+    if ($entryProbe -notmatch '(?i)\bwinpe\b' -or $entryProbe -notmatch '(?i)\byes\b') {
+        throw ("BCD RescueGrid : winpe yes manquant sur {0}." -f $guid)
     }
     if ($entryProbe -notmatch [regex]::Escape(('[{0}:]' -f $ToolsLetter)) -and $entryProbe -notmatch [regex]::Escape(('partition={0}:' -f $ToolsLetter))) {
         throw ("BCD RescueGrid : device non retargete vers {0}: pour {1}." -f $ToolsLetter, $guid)
