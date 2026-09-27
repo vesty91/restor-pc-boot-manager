@@ -41,7 +41,8 @@ $configuration.CodeCoverage.Path = @(
     (Join-Path $repoRoot 'scripts\lib\RestorPc.Common.psm1'),
     (Join-Path $repoRoot 'scripts\lib\RestorPc.Backup.psm1'),
     (Join-Path $repoRoot 'scripts\Test-RestorGoldenBackup.ps1'),
-    (Join-Path $repoRoot 'scripts\Restore-RestorBootManager.ps1')
+    (Join-Path $repoRoot 'scripts\Restore-RestorBootManager.ps1'),
+    (Join-Path $repoRoot 'scripts\New-RestorRecoveryDisk.ps1')
 )
 $configuration.CodeCoverage.OutputFormat = 'JaCoCo'
 $configuration.CodeCoverage.OutputPath = Join-Path $outputRoot 'coverage.xml'

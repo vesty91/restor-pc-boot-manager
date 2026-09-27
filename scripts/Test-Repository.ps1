@@ -19,6 +19,7 @@ $steps = @(
     @{ Name = 'QEMU safety'; Script = 'Test-QemuSafety.ps1' },
     @{ Name = 'repository safety'; Script = 'Test-RepositorySafety.ps1' },
     @{ Name = 'restore safety'; Script = 'Test-RestoreSafety.ps1' },
+    @{ Name = 'recovery safety'; Script = 'Test-RecoverySafety.ps1' },
     @{ Name = 'virtual lab safety'; Script = 'Test-VirtualLabSafety.ps1' },
     @{ Name = 'Pester behavioral tests'; Script = 'Test-Behavior.ps1' }
 )
@@ -157,7 +158,7 @@ function Write-RestorGitHubSummary {
         $pester = Get-Content -LiteralPath $pesterPath -Raw -Encoding UTF8 | ConvertFrom-Json
     }
     $syntax = if ($stepResults['PowerShell syntax']) { 'PASS' } else { 'FAIL' }
-    $staticNames = @('rEFInd config', 'theme assets', 'QEMU safety', 'repository safety', 'restore safety', 'virtual lab safety')
+    $staticNames = @('rEFInd config', 'theme assets', 'QEMU safety', 'repository safety', 'restore safety', 'recovery safety', 'virtual lab safety')
     $staticPass = $true
     foreach ($name in $staticNames) {
         if (-not $stepResults.Contains($name) -or -not $stepResults[$name]) { $staticPass = $false }

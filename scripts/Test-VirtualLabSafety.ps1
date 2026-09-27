@@ -13,6 +13,7 @@ $failed = $false
 $labScript = Join-Path $repoRoot 'scripts\New-RestorVirtualLab.ps1'
 $inventoryScript = Join-Path $repoRoot 'scripts\Get-RestorVirtualLab.ps1'
 $orchestrator = Join-Path $repoRoot 'scripts\Test-VirtualRestore.ps1'
+$fullRecovery = Join-Path $repoRoot 'scripts\Test-FullRecovery.ps1'
 $restoreScript = Join-Path $repoRoot 'scripts\Restore-RestorBootManager.ps1'
 
 function Get-ScriptAst {
@@ -24,7 +25,7 @@ function Get-ScriptAst {
     return $ast
 }
 
-foreach ($path in @($labScript, $inventoryScript, $orchestrator, $restoreScript)) {
+foreach ($path in @($labScript, $inventoryScript, $orchestrator, $fullRecovery, $restoreScript)) {
     if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
         Write-Host ("[ERROR] Script absent : {0}" -f $path)
         exit 1
@@ -32,7 +33,7 @@ foreach ($path in @($labScript, $inventoryScript, $orchestrator, $restoreScript)
 }
 
 $forbidden = @('\\.\PhysicalDrive', 'Clear-Disk', 'diskpart', 'SkipSafety', 'ForceTestDisk', 'AllowNonNvme', 'IgnoreSerial', 'DisableDiskCheck', 'Enable-WindowsOptionalFeature')
-foreach ($path in @($labScript, $inventoryScript, $orchestrator)) {
+foreach ($path in @($labScript, $inventoryScript, $orchestrator, $fullRecovery)) {
     $text = [IO.File]::ReadAllText($path)
     foreach ($token in $forbidden) {
         if ($text.IndexOf($token, [StringComparison]::OrdinalIgnoreCase) -ge 0) {
@@ -49,6 +50,15 @@ if ($labText.IndexOf('test\vhd', [StringComparison]::OrdinalIgnoreCase) -lt 0) {
 if ($labText.IndexOf('SAMSUNG MZVLB256HAHQ-000L2', [StringComparison]::Ordinal) -lt 0 -or $labText.IndexOf('PHYSICAL RESTOR-PC NVME BLOCKED', [StringComparison]::Ordinal) -lt 0) {
     $failed = $true
     Write-Host '[ERROR] Le NVMe physique n est pas bloque explicitement.'
+}
+$fullText = [IO.File]::ReadAllText($fullRecovery)
+if ($fullText.IndexOf('test\vhd\full-recovery-lab', [StringComparison]::OrdinalIgnoreCase) -lt 0) {
+    $failed = $true
+    Write-Host '[ERROR] Full Recovery ne force pas test\vhd\full-recovery-lab.'
+}
+if ($fullText.IndexOf('SAMSUNG MZVLB256HAHQ-000L2', [StringComparison]::Ordinal) -lt 0 -or $fullText.IndexOf('PHYSICAL RESTOR-PC NVME BLOCKED', [StringComparison]::Ordinal) -lt 0) {
+    $failed = $true
+    Write-Host '[ERROR] Full Recovery ne bloque pas le NVMe physique.'
 }
 $restoreText = [IO.File]::ReadAllText($restoreScript)
 foreach ($token in @('SkipSafety', 'ForceTestDisk', 'AllowNonNvme', 'IgnoreSerial', 'DisableDiskCheck')) {
