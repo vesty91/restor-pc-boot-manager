@@ -103,14 +103,20 @@ function Update-RestorRescueGridBcd {
 
     $guid = $null
     $osloaderEnum = & bcdedit.exe /store $store /enum osloader /v | Out-String
-    # Language-agnostic: GUID of the object whose description is RESTOR-PC RESCUEGRID,
-    # without relying on localized Identificateur/Identifier headings.
-    $guidMatch = [regex]::Match(
-        $osloaderEnum,
-        '(?is)(\{[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}\})(?:(?!\{[0-9a-fA-F]{8}).)*?RESTOR-PC RESCUEGRID'
-    )
-    if ($guidMatch.Success) {
-        $guid = $guidMatch.Groups[1].Value
+    # Structural selection: nearest GUID before RESTOR-PC RESCUEGRID that is not
+    # the well-known {ramdiskoptions} GUID (often expanded inline in device lines).
+    $ramdiskOptionsGuid = '{ae5534e0-51f0-11dd-93e7-001560b44f3a}'
+    foreach ($descMatch in @([regex]::Matches($osloaderEnum, 'RESTOR-PC RESCUEGRID'))) {
+        $before = $osloaderEnum.Substring(0, $descMatch.Index)
+        $guids = @([regex]::Matches($before, '\{[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}\}'))
+        for ($i = $guids.Count - 1; $i -ge 0; $i--) {
+            $candidate = $guids[$i].Value
+            if (-not $candidate.Equals($ramdiskOptionsGuid, [StringComparison]::OrdinalIgnoreCase)) {
+                $guid = $candidate
+                break
+            }
+        }
+        if (-not [string]::IsNullOrWhiteSpace($guid)) { break }
     }
     if ([string]::IsNullOrWhiteSpace($guid)) {
         $created = Invoke-RestorRecoveryBcd ("/store `"{0}`" /create /d `"RESTOR-PC RESCUEGRID`" /application osloader" -f $store)
