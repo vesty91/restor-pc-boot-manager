@@ -25,7 +25,7 @@ foreach ($relative in ($patterns | Sort-Object)) {
     if (-not (Test-Path -LiteralPath $full -PathType Leaf)) {
         throw ("Fichier critique absent pour le manifeste de release : " + $relative)
     }
-    $hash = (Get-FileHash -LiteralPath $full -Algorithm SHA256).Hash.ToUpperInvariant()
+    $hash = Get-RestorCanonicalReleaseFileSha256 -Path $full -RelativePath $relative
     $normalized = $relative -replace '/', '\'
     $lines.Add(("{0}  {1}" -f $hash, $normalized))
     $fileCount++
@@ -41,7 +41,8 @@ if ([string]::IsNullOrWhiteSpace($SourceCommit)) {
 if ([string]::IsNullOrWhiteSpace($SourceCommit) -or $SourceCommit -eq 'pending-release-tag') {
     throw 'SourceCommit invalide pour RELEASE-INFO.json.'
 }
-$vesty = (Get-FileHash -LiteralPath (Join-Path $repoRoot 'theme\restor-pc\assets\win_vesty.png') -Algorithm SHA256).Hash.ToUpperInvariant()
+$vestyRelative = 'theme\restor-pc\assets\win_vesty.png'
+$vesty = Get-RestorCanonicalReleaseFileSha256 -Path (Join-Path $repoRoot $vestyRelative) -RelativePath $vestyRelative
 $info = [ordered]@{
     Version             = $Version
     Commit              = $SourceCommit

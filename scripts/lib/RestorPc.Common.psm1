@@ -152,6 +152,38 @@ function Get-RestorCriticalReleaseRelativePaths {
     ) | Sort-Object
 }
 
+function Get-RestorCanonicalReleaseFileSha256 {
+    param(
+        [Parameter(Mandatory)][string]$Path,
+        [Parameter(Mandatory)][string]$RelativePath
+    )
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
+        throw ("Fichier absent pour hash canonique : " + $RelativePath)
+    }
+    $ext = [IO.Path]::GetExtension($RelativePath).ToLowerInvariant()
+    $binaryExtensions = @(
+        '.png', '.jpg', '.jpeg', '.gif', '.webp', '.ico',
+        '.exe', '.dll', '.bin', '.wim', '.sdi', '.efi'
+    )
+    if ($binaryExtensions -contains $ext) {
+        return (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToUpperInvariant()
+    }
+    $raw = [IO.File]::ReadAllBytes($Path)
+    $offset = 0
+    if ($raw.Length -ge 3 -and $raw[0] -eq 0xEF -and $raw[1] -eq 0xBB -and $raw[2] -eq 0xBF) {
+        $offset = 3
+    }
+    $text = [Text.Encoding]::UTF8.GetString($raw, $offset, $raw.Length - $offset)
+    $normalized = ($text -replace "`r`n", "`n") -replace "`r", "`n"
+    $bytes = [Text.Encoding]::UTF8.GetBytes($normalized)
+    $sha = [Security.Cryptography.SHA256]::Create()
+    try {
+        return ([BitConverter]::ToString($sha.ComputeHash($bytes))).Replace('-', '').ToUpperInvariant()
+    } finally {
+        $sha.Dispose()
+    }
+}
+
 Export-ModuleMember -Function @(
     'ConvertTo-NormalizedSerial',
     'Resolve-RestorDiskSelection',
@@ -162,5 +194,6 @@ Export-ModuleMember -Function @(
     'Resolve-RestorPreRestoreRoot',
     'Test-RestorAdministrator',
     'Exit-RestorCommand',
-    'Get-RestorCriticalReleaseRelativePaths'
+    'Get-RestorCriticalReleaseRelativePaths',
+    'Get-RestorCanonicalReleaseFileSha256'
 )

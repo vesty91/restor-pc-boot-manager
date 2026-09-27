@@ -95,7 +95,7 @@ foreach ($entry in $expectedEntries) {
     }
 }
 $vestyPath = Join-Path $RepoRoot 'theme\restor-pc\assets\win_vesty.png'
-$vestyHash = (Get-FileHash -LiteralPath $vestyPath -Algorithm SHA256).Hash.ToUpperInvariant()
+$vestyHash = Get-RestorCanonicalReleaseFileSha256 -Path $vestyPath -RelativePath 'theme\restor-pc\assets\win_vesty.png'
 if ([string]$info.ExpectedVestySha256 -ne $vestyHash) {
     $failed = $true
     Write-Step 'ERROR' 'ExpectedVestySha256 ne correspond pas a win_vesty.png.'
@@ -136,7 +136,7 @@ foreach ($raw in @(Get-Content -LiteralPath $integrityPath)) {
         Write-Step 'ERROR' ("Fichier absent : {0}" -f $relative)
         continue
     }
-    $actual = (Get-FileHash -LiteralPath $fullResolved -Algorithm SHA256).Hash.ToUpperInvariant()
+    $actual = Get-RestorCanonicalReleaseFileSha256 -Path $fullResolved -RelativePath $relative
     if ($actual -ne $hash) {
         $failed = $true
         Write-Step 'ERROR' ("Hash modifie : {0}" -f $relative)
