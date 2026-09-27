@@ -94,6 +94,24 @@ function Get-RestorManifestLine {
     return @($lines | Sort-Object { $_.Substring(66) })
 }
 
+function Resolve-RestorPreRestoreRoot {
+    param([AllowNull()][AllowEmptyString()][string]$Path = 'C:\RESTOR-PC-BACKUP')
+    if ([string]::IsNullOrWhiteSpace($Path)) { throw 'PreRestoreRoot vide refuse.' }
+    $full = [IO.Path]::GetFullPath($Path)
+    $root = [IO.Path]::GetPathRoot($full).TrimEnd('\')
+    if ($full.TrimEnd('\') -eq $root) { throw 'PreRestoreRoot racine refuse.' }
+    $windows = [IO.Path]::GetFullPath($env:SystemRoot).TrimEnd('\')
+    $system32 = [IO.Path]::GetFullPath((Join-Path $env:SystemRoot 'System32')).TrimEnd('\')
+    $probe = $full.TrimEnd('\')
+    if ($probe.Equals($system32, [StringComparison]::OrdinalIgnoreCase) -or $probe.StartsWith($system32 + '\', [StringComparison]::OrdinalIgnoreCase)) {
+        throw 'PreRestoreRoot sous System32 refuse.'
+    }
+    if ($probe.Equals($windows, [StringComparison]::OrdinalIgnoreCase) -or $probe.StartsWith($windows + '\', [StringComparison]::OrdinalIgnoreCase)) {
+        throw 'PreRestoreRoot sous Windows refuse.'
+    }
+    return $full
+}
+
 function Exit-RestorCommand {
     param([int]$Code = 0)
     if ($env:RESTOR_PC_INLINE_TEST -eq '1') {
@@ -109,5 +127,6 @@ Export-ModuleMember -Function @(
     'Test-RobocopySuccessCode',
     'Resolve-RestorTemporaryLetter',
     'Get-RestorManifestLine',
+    'Resolve-RestorPreRestoreRoot',
     'Exit-RestorCommand'
 )

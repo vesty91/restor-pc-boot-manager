@@ -31,3 +31,33 @@ Describe 'Get-RestorRestoreTarget' {
         @(Get-RestorRestoreTarget).Count | Should -Be 0
     }
 }
+
+Describe 'Resolve-RestorPreRestoreRoot' {
+    It 'utilise C:\RESTOR-PC-BACKUP par defaut' {
+        $restore = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..\scripts\Restore-RestorBootManager.ps1'))
+        $tokens = $null
+        $parseErrors = $null
+        $ast = [System.Management.Automation.Language.Parser]::ParseFile($restore, [ref]$tokens, [ref]$parseErrors)
+        $parameter = @($ast.ParamBlock.Parameters | Where-Object { $_.Name.VariablePath.UserPath -eq 'PreRestoreRoot' })
+        $parameter.Count | Should -Be 1
+        $parameter[0].DefaultValue.Value | Should -Be 'C:\RESTOR-PC-BACKUP'
+        Resolve-RestorPreRestoreRoot | Should -Be 'C:\RESTOR-PC-BACKUP'
+    }
+    It 'accepte un chemin de laboratoire explicite' {
+        $repo = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
+        $lab = Join-Path $repo 'test\vhd\restore-lab\pre-restore'
+        (Resolve-RestorPreRestoreRoot -Path $lab).TrimEnd('\') | Should -Be ([IO.Path]::GetFullPath($lab).TrimEnd('\'))
+    }
+    It 'refuse une chaine vide' {
+        { Resolve-RestorPreRestoreRoot -Path '' } | Should -Throw '*vide*'
+    }
+    It 'refuse la racine C:\' {
+        { Resolve-RestorPreRestoreRoot -Path 'C:\' } | Should -Throw '*racine*'
+    }
+    It 'refuse Windows' {
+        { Resolve-RestorPreRestoreRoot -Path $env:SystemRoot } | Should -Throw '*Windows*'
+    }
+    It 'refuse System32' {
+        { Resolve-RestorPreRestoreRoot -Path (Join-Path $env:SystemRoot 'System32') } | Should -Throw '*System32*'
+    }
+}

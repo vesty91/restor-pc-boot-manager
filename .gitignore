@@ -23,6 +23,11 @@ test/stubs/
 test/*.fd
 bootloader/refind/
 
+# Laboratoire VHDX local. Aucun disque virtuel n'est versionne.
+test/vhd/
+*.vhd
+*.vhdx
+
 # Sorties de tests. Les fichiers *.Tests.ps1 restent versionnes.
 TestResults.xml
 coverage.xml
