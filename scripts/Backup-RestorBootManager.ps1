@@ -16,6 +16,7 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+Import-Module (Join-Path $PSScriptRoot 'lib\RestorPc.Common.psm1') -Force
 
 $BackupVersion = '1.1.0'
 $EfiType = '{c12a7328-f81f-11d2-ba4b-00a0c93ec93b}'
@@ -52,28 +53,16 @@ function Assert-Administrator {
     }
 }
 
-function ConvertTo-NormalizedSerial {
-    param([string]$Value)
-    if ([string]::IsNullOrWhiteSpace($Value)) { return '' }
-    return ($Value.Trim().TrimEnd('.').ToUpperInvariant())
-}
-
 function Get-RestorDisk {
-    $expectedSerialNorm = ConvertTo-NormalizedSerial $ExpectedSerial
-    $matchedDisks = @()
-    foreach ($candidate in @(Get-Disk)) {
-        $serial = ConvertTo-NormalizedSerial ([string]$candidate.SerialNumber)
-        $model = ([string]$candidate.FriendlyName).Trim()
-        if ($model -eq $ExpectedModel.Trim() -and $serial -eq $expectedSerialNorm) {
-            $matchedDisks += $candidate
-        }
+    $selection = Resolve-RestorDiskSelection -Disks @(Get-Disk) -Model $ExpectedModel -Serial $ExpectedSerial
+    switch ($selection.Code) {
+        'Ok' { return $selection.Disk }
+        'None' { throw 'Aucun disque ne correspond au modèle et au numéro de série RESTOR-PC.' }
+        'Ambiguous' { throw 'Plusieurs disques correspondent au modèle et au numéro de série RESTOR-PC.' }
+        'NotGpt' { throw 'Le disque identifié n''est pas GPT.' }
+        'NotNvme' { throw 'Le disque identifié n''est pas NVMe.' }
+        default { throw ("Identification NVMe inattendue : " + $selection.Code) }
     }
-    if ($matchedDisks.Count -eq 0) { throw 'Aucun disque ne correspond au modèle et au numéro de série RESTOR-PC.' }
-    if ($matchedDisks.Count -gt 1) { throw 'Plusieurs disques correspondent au modèle et au numéro de série RESTOR-PC.' }
-    $disk = $matchedDisks[0]
-    if ([string]$disk.PartitionStyle -ne 'GPT') { throw 'Le disque identifié n''est pas GPT.' }
-    if ([string]$disk.BusType -ne 'NVMe') { throw 'Le disque identifié n''est pas NVMe.' }
-    return $disk
 }
 
 function Get-PartitionSignature {
@@ -96,10 +85,7 @@ function Get-FreeDriveLetter {
         if ($logical.DeviceID -match '^([A-Za-z]):$') { [void]$used.Add($Matches[1].ToUpperInvariant()) }
     }
     foreach ($reserved in $script:ReservedLetters) { [void]$used.Add($reserved) }
-    foreach ($letter in @('R', 'S', 'T', 'W', 'Z', 'L')) {
-        if (-not $used.Contains($letter)) { return $letter }
-    }
-    throw 'Aucune lettre temporaire libre parmi R, S, T, W, Z, L.'
+    return Resolve-RestorTemporaryLetter -UsedLetter @($used)
 }
 
 function Mount-SourcePartition {
@@ -151,7 +137,7 @@ function Copy-WithRobocopy {
     )
     & robocopy.exe @robocopyArguments | Out-Null
     $code = $LASTEXITCODE
-    if ($code -ge 8) {
+    if (-not (Test-RobocopySuccessCode -ExitCode $code)) {
         throw ("Robocopy a échoué pour {0} (code {1})." -f $Source, $code)
     }
     Write-Step 'OK' ("Copie {0} (robocopy {1})." -f $Source, $code)
@@ -237,16 +223,7 @@ public static class RestorPartitionNameReader {
 
 function Get-RelativeHashLines {
     param([string]$Root, [string[]]$ExcludedNames)
-    $lines = New-Object System.Collections.Generic.List[string]
-    $files = @(Get-ChildItem -LiteralPath $Root -Recurse -File -Force | Sort-Object FullName)
-    foreach ($file in $files) {
-        if ($ExcludedNames -contains $file.Name -and $file.DirectoryName -eq (Join-Path $Root 'Manifests')) { continue }
-        if ($file.Name -eq 'BACKUP-INFO.json' -and $file.DirectoryName -eq $Root) { continue }
-        $relative = $file.FullName.Substring($Root.Length).TrimStart('\')
-        $hash = (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash.ToUpperInvariant()
-        $lines.Add(('{0}  {1}' -f $hash, $relative))
-    }
-    return @($lines | Sort-Object { $_.Substring(66) })
+    return @(Get-RestorManifestLine -Root $Root -ExcludedNames $ExcludedNames)
 }
 
 if ($MyInvocation.InvocationName -ne '.') {

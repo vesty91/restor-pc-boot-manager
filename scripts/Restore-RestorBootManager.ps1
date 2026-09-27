@@ -24,16 +24,11 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+Import-Module (Join-Path $PSScriptRoot 'lib\RestorPc.Common.psm1') -Force
 
 function Write-Step {
     param([string]$Level, [string]$Message)
     Write-Host ("[{0}] {1}" -f $Level, $Message)
-}
-
-function ConvertTo-NormalizedSerial {
-    param([string]$Value)
-    if ([string]::IsNullOrWhiteSpace($Value)) { return '' }
-    return ($Value.Trim().TrimEnd('.').ToUpperInvariant())
 }
 
 function Get-RestorDisk {
@@ -41,28 +36,19 @@ function Get-RestorDisk {
         [Parameter(Mandatory)][string]$Model,
         [Parameter(Mandatory)][string]$Serial
     )
-    $expectedSerialNorm = ConvertTo-NormalizedSerial $Serial
-    $matchedDisks = @()
-    foreach ($candidate in @(Get-Disk)) {
-        $serial = ConvertTo-NormalizedSerial ([string]$candidate.SerialNumber)
-        $modelName = ([string]$candidate.FriendlyName).Trim()
-        if ($modelName -eq $Model.Trim() -and $serial -eq $expectedSerialNorm) { $matchedDisks += $candidate }
+    $selection = Resolve-RestorDiskSelection -Disks @(Get-Disk) -Model $Model -Serial $Serial
+    switch ($selection.Code) {
+        'Ok' { return $selection.Disk }
+        'None' { throw 'NVMe RESTOR-PC introuvable ou ambigu. Restauration annulée.' }
+        'Ambiguous' { throw 'NVMe RESTOR-PC introuvable ou ambigu. Restauration annulée.' }
+        'NotGpt' { throw 'Le NVMe RESTOR-PC n''est pas GPT.' }
+        'NotNvme' { throw 'Le disque identifié n''est pas NVMe.' }
+        default { throw ("Identification NVMe inattendue : " + $selection.Code) }
     }
-    if ($matchedDisks.Count -ne 1) { throw 'NVMe RESTOR-PC introuvable ou ambigu. Restauration annulée.' }
-    $disk = $matchedDisks[0]
-    if ([string]$disk.PartitionStyle -ne 'GPT') { throw 'Le NVMe RESTOR-PC n''est pas GPT.' }
-    if ([string]$disk.BusType -ne 'NVMe') { throw 'Le disque identifié n''est pas NVMe.' }
-    return $disk
 }
 
-$targets = @()
-if ($AllEfi -or $RestorBoot) { $targets += 'RESTOR-BOOT' }
-if ($AllEfi -or $CodeEfi) { $targets += 'CODE-EFI' }
-if ($AllEfi -or $VestyEfi) { $targets += 'VESTY-EFI' }
-if ($AllEfi -or $RescueEfi) { $targets += 'RESCUE-EFI' }
-if ($AllEfi -or $LockpickEfi) { $targets += 'LOCKPICK-EFI' }
-$targets = @($targets | Select-Object -Unique)
-$writeAllowed = $Apply -and $ConfirmRestore -eq 'RESTOR-PC'
+$targets = @(Get-RestorRestoreTarget -RestorBoot:$RestorBoot -CodeEfi:$CodeEfi -VestyEfi:$VestyEfi -RescueEfi:$RescueEfi -LockpickEfi:$LockpickEfi -AllEfi:$AllEfi)
+$writeAllowed = $Apply -and $ConfirmRestore -ceq 'RESTOR-PC'
 if ($Apply -and -not $writeAllowed) {
     Write-Step 'WARN' 'Confirmation refusée. La phrase exacte est RESTOR-PC. Aucune écriture.'
 }
@@ -103,7 +89,7 @@ foreach ($target in $targets) {
 
 if (-not $writeAllowed) {
     Write-Step 'OK' 'Aucune écriture effectuée.'
-    exit 0
+    Exit-RestorCommand -Code 0
 }
 
 $identity = [Security.Principal.WindowsIdentity]::GetCurrent()

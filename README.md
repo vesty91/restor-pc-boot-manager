@@ -112,6 +112,18 @@ La CI ne touche jamais au matériel, ne monte pas de disque physique, ne lance p
 
 `Write-Host` reste le canal des lignes `[OK]`, `[WARN]` et `[ERROR]`. Les noms de fonctions internes au pluriel ne sont pas renommés. Les scripts PowerShell Unicode sont en UTF-8 avec BOM, pour Windows PowerShell et PowerShell 7. Les portes bloquantes sont dans `config/PSScriptAnalyzerSettings.psd1` : catch vide, variable automatique écrasée, paramètre inutilisé.
 
+## Automated tests
+
+Pester, fixtures offline, mocks materiel.
+
+The test suite never accesses physical disks.
+
+```powershell
+pwsh -NoProfile -File .\scripts\Test-Behavior.ps1
+```
+
+Le detail est dans `tests/README.md`.
+
 ## Releases
 
 - [v1.1.0](docs/releases/v1.1.0.md)

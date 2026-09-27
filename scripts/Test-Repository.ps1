@@ -18,16 +18,20 @@ $steps = @(
     @{ Name = 'theme assets'; Script = 'Test-ThemeAssets.ps1' },
     @{ Name = 'QEMU safety'; Script = 'Test-QemuSafety.ps1' },
     @{ Name = 'repository safety'; Script = 'Test-RepositorySafety.ps1' },
-    @{ Name = 'restore safety'; Script = 'Test-RestoreSafety.ps1' }
+    @{ Name = 'restore safety'; Script = 'Test-RestoreSafety.ps1' },
+    @{ Name = 'Pester behavioral tests'; Script = 'Test-Behavior.ps1' }
 )
+$stepResults = [ordered]@{}
 
 foreach ($step in $steps) {
     $scriptPath = Join-Path $PSScriptRoot $step.Script
     & $runner -NoProfile -File $scriptPath
     if ($LASTEXITCODE -ne 0) {
         $failed = $true
+        $stepResults[$step.Name] = $false
         Write-Host ("[ERROR] " + $step.Name)
     } else {
+        $stepResults[$step.Name] = $true
         Write-Host ("[OK] " + $step.Name)
     }
 }
@@ -59,7 +63,9 @@ if (Test-Path -LiteralPath $readmePath -PathType Leaf) {
         '## CI / Validation',
         'pwsh -NoProfile -File .\scripts\Test-Repository.ps1',
         'RESTOR-PC CI',
-        '.github/workflows/ci.yml'
+        '.github/workflows/ci.yml',
+        '## Automated tests',
+        'The test suite never accesses physical disks.'
     )
     foreach ($needle in $readmeNeedles) {
         if ($readme.IndexOf($needle, [StringComparison]::Ordinal) -lt 0) {
@@ -80,6 +86,9 @@ if (Test-Path -LiteralPath $workflowPath -PathType Leaf) {
         'cancel-in-progress: true',
         'timeout-minutes: 15',
         'actions/checkout@v7',
+        'ToolVersions.psd1',
+        'RequiredVersion',
+        'Pester',
         'pwsh -NoProfile -File .\scripts\Test-Repository.ps1'
     )
     foreach ($needle in $workflowNeedles) {
@@ -136,6 +145,52 @@ if ($analyzer.Count -eq 0) {
     }
 }
 
-if ($failed) { exit 1 }
+function Write-RestorGitHubSummary {
+    param([switch]$Failed)
+    if ([string]::IsNullOrWhiteSpace($env:GITHUB_STEP_SUMMARY)) { return }
+    $pesterPath = Join-Path $repoRoot 'tests-output\pester-summary.json'
+    $pester = $null
+    if (Test-Path -LiteralPath $pesterPath) {
+        $pester = Get-Content -LiteralPath $pesterPath -Raw -Encoding UTF8 | ConvertFrom-Json
+    }
+    $syntax = if ($stepResults['PowerShell syntax']) { 'PASS' } else { 'FAIL' }
+    $staticNames = @('rEFInd config', 'theme assets', 'QEMU safety', 'repository safety', 'restore safety')
+    $staticPass = $true
+    foreach ($name in $staticNames) {
+        if (-not $stepResults.Contains($name) -or -not $stepResults[$name]) { $staticPass = $false }
+    }
+    $static = if ($staticPass) { 'PASS' } else { 'FAIL' }
+    $pesterState = if ($stepResults['Pester behavioral tests']) { 'PASS' } else { 'FAIL' }
+    $warningCount = 0
+    if (Get-Variable -Name warnings -Scope Script -ErrorAction SilentlyContinue) {
+        $warningCount = @($warnings).Count
+    }
+    $lines = New-Object System.Collections.Generic.List[string]
+    $lines.Add('## RESTOR-PC Test Summary')
+    $lines.Add('')
+    $lines.Add("PowerShell syntax : $syntax")
+    $lines.Add("Static safety : $static")
+    $lines.Add("Pester : $pesterState")
+    $lines.Add('')
+    if ($null -ne $pester) {
+        $lines.Add("Tests : $($pester.Total)")
+        $lines.Add("Passed : $($pester.Passed)")
+        $lines.Add("Failed : $($pester.Failed)")
+    } else {
+        $lines.Add('Tests : n/a')
+        $lines.Add('Passed : n/a')
+        $lines.Add('Failed : n/a')
+    }
+    $lines.Add('')
+    $lines.Add("PSScriptAnalyzer warnings : $warningCount")
+    if ($Failed) { $lines.Add('') ; $lines.Add('Result : FAIL') }
+    Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Value ($lines -join "`n") -Encoding utf8
+}
+
+if ($failed) {
+    Write-RestorGitHubSummary -Failed
+    exit 1
+}
 Write-Host '[OK] RESTOR-PC repository validation passed'
+Write-RestorGitHubSummary
 exit 0

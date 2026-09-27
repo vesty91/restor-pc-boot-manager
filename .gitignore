@@ -22,3 +22,10 @@ test/logs/
 test/stubs/
 test/*.fd
 bootloader/refind/
+
+# Sorties de tests. Les fichiers *.Tests.ps1 restent versionnes.
+TestResults.xml
+coverage.xml
+tests-output/
+*.trx
+

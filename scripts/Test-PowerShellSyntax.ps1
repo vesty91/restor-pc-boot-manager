@@ -12,7 +12,10 @@ $repoRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 $scriptsRoot = Join-Path $repoRoot 'scripts'
 $failed = $false
 
-$files = @(Get-ChildItem -LiteralPath $scriptsRoot -Filter '*.ps1' -File)
+$files = @(
+    Get-ChildItem -LiteralPath $scriptsRoot -Filter '*.ps1' -File
+    Get-ChildItem -LiteralPath $scriptsRoot -Recurse -Filter '*.psm1' -File
+)
 if ($files.Count -eq 0) {
     Write-Host '[ERROR] Aucun script PowerShell dans scripts\.'
     exit 1

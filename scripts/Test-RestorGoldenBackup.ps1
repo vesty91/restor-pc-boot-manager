@@ -11,6 +11,7 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+Import-Module (Join-Path $PSScriptRoot 'lib\RestorPc.Common.psm1') -Force
 $failures = New-Object System.Collections.Generic.List[string]
 
 function Write-Step {
@@ -31,7 +32,7 @@ if (-not (Test-Path -LiteralPath $infoPath)) { Add-Failure 'BACKUP-INFO.json abs
 if (-not (Test-Path -LiteralPath $manifestPath)) { Add-Failure 'SHA256-MANIFEST.txt absent.' }
 if ($failures.Count -gt 0) {
     Write-Step 'ERROR' 'GOLDEN BACKUP INVALID'
-    exit 1
+    Exit-RestorCommand -Code 1
 }
 
 $info = Get-Content -LiteralPath $infoPath -Raw -Encoding UTF8 | ConvertFrom-Json
@@ -99,7 +100,7 @@ if (-not (Test-Path -LiteralPath $bootWim)) { Add-Failure 'boot.wim RescueGrid a
 
 if ($failures.Count -gt 0) {
     Write-Step 'ERROR' 'GOLDEN BACKUP INVALID'
-    exit 1
+    Exit-RestorCommand -Code 1
 }
 Write-Step 'OK' 'GOLDEN BACKUP VALID'
-exit 0
+Exit-RestorCommand -Code 0

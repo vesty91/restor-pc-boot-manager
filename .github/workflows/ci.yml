@@ -25,13 +25,22 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
-      - name: Install PSScriptAnalyzer
+      - name: Install pinned test tools
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
+          Write-Host ("PowerShell : " + $PSVersionTable.PSVersion)
           Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
-          Install-Module -Name PSScriptAnalyzer -Scope CurrentUser -Force -AllowClobber
+          $versions = Import-PowerShellDataFile .\config\ToolVersions.psd1
+          Install-Module -Name PSScriptAnalyzer -RequiredVersion $versions.PSScriptAnalyzer -Scope CurrentUser -Force -AllowClobber
+          Install-Module -Name Pester -RequiredVersion $versions.Pester -Scope CurrentUser -Force -AllowClobber
           Get-Module PSScriptAnalyzer -ListAvailable |
+            Where-Object { $_.Version -eq [version]$versions.PSScriptAnalyzer } |
+            Sort-Object Version -Descending |
+            Select-Object -First 1 |
+            Format-List Name, Version
+          Get-Module Pester -ListAvailable |
+            Where-Object { $_.Version -eq [version]$versions.Pester } |
             Sort-Object Version -Descending |
             Select-Object -First 1 |
             Format-List Name, Version

@@ -82,7 +82,7 @@ function Test-WriteGate {
     if ($Expression.Left.VariablePath.UserPath -ne 'Apply') { return $false }
     $comparison = $Expression.Right
     if ($comparison -isnot [System.Management.Automation.Language.BinaryExpressionAst]) { return $false }
-    if ([string]$comparison.Operator -ne 'Ieq') { return $false }
+    if ([string]$comparison.Operator -ne 'Ceq') { return $false }
     if ($comparison.Left -isnot [System.Management.Automation.Language.VariableExpressionAst]) { return $false }
     if ($comparison.Left.VariablePath.UserPath -ne 'ConfirmRestore') { return $false }
     if ($comparison.Right -isnot [System.Management.Automation.Language.StringConstantExpressionAst]) { return $false }
@@ -137,6 +137,51 @@ foreach ($exitNode in @($restoreAst.FindAll({
             $condition.Child -is [System.Management.Automation.Language.VariableExpressionAst] -and
             $condition.Child.VariablePath.UserPath -eq 'writeAllowed'
         if ($isDryRun) { $dryRunExit = $exitNode }
+    }
+}
+if ($null -eq $dryRunExit) {
+    foreach ($stopNode in @($restoreAst.FindAll({
+        param($node)
+        $node -is [System.Management.Automation.Language.CommandAst] -and $node.GetCommandName() -eq 'Exit-RestorCommand'
+    }, $true))) {
+        $parent = $stopNode.Parent
+        while ($null -ne $parent -and $parent -isnot [System.Management.Automation.Language.IfStatementAst]) {
+            $parent = $parent.Parent
+        }
+        if ($null -eq $parent) { continue }
+        foreach ($clause in @($parent.Clauses)) {
+            $ownsStop = $stopNode.Extent.StartOffset -ge $clause.Item2.Extent.StartOffset -and $stopNode.Extent.EndOffset -le $clause.Item2.Extent.EndOffset
+            if (-not $ownsStop) { continue }
+            $condition = Get-InnerExpression -Expression $clause.Item1
+            $isDryRun = $condition -is [System.Management.Automation.Language.UnaryExpressionAst] -and
+                [string]$condition.TokenKind -eq 'Not' -and
+                $condition.Child -is [System.Management.Automation.Language.VariableExpressionAst] -and
+                $condition.Child.VariablePath.UserPath -eq 'writeAllowed'
+            $stopsWithZero = $stopNode.Extent.Text -match '-Code\s+0'
+            if ($isDryRun -and $stopsWithZero) { $dryRunExit = $stopNode }
+        }
+    }
+}
+$stopFunction = Join-Path $repoRoot 'scripts\lib\RestorPc.Common.psm1'
+if (-not (Test-Path -LiteralPath $stopFunction -PathType Leaf)) {
+    $failed = $true
+    Write-Host '[ERROR] RestorPc.Common.psm1 est absent.'
+} else {
+    $moduleAst = Get-ScriptAst -Path $stopFunction
+    $functionNode = @($moduleAst.FindAll({
+        param($node)
+        $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq 'Exit-RestorCommand'
+    }, $true))
+    $moduleExit = @()
+    if ($functionNode.Count -eq 1) {
+        $moduleExit = @($functionNode[0].Body.FindAll({
+            param($node)
+            $node -is [System.Management.Automation.Language.ExitStatementAst]
+        }, $true))
+    }
+    if ($functionNode.Count -ne 1 -or $moduleExit.Count -lt 1) {
+        $failed = $true
+        Write-Host '[ERROR] Exit-RestorCommand doit encore appeler exit hors du mode de test.'
     }
 }
 if ($null -eq $dryRunExit) {
