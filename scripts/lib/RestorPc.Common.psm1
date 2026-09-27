@@ -128,6 +128,62 @@ function Exit-RestorCommand {
     exit $Code
 }
 
+function Get-RestorCriticalReleaseRelativePaths {
+    @(
+        'config\refind.conf',
+        'scripts\Backup-RestorBootManager.ps1',
+        'scripts\Restore-RestorBootManager.ps1',
+        'scripts\New-RestorRecoveryDisk.ps1',
+        'scripts\Build-RestorRecoveryMedia.ps1',
+        'scripts\Test-RestorGoldenBackup.ps1',
+        'scripts\Test-ReleaseIntegrity.ps1',
+        'scripts\New-ReleaseIntegrityManifest.ps1',
+        'scripts\lib\RestorPc.Common.psm1',
+        'scripts\lib\RestorPc.Backup.psm1',
+        'theme\restor-pc\assets\win_code.png',
+        'theme\restor-pc\assets\win_vesty.png',
+        'theme\restor-pc\assets\memtest86plus.png',
+        'theme\restor-pc\assets\rescuegrid.png',
+        'theme\restor-pc\assets\lockpick.png',
+        'docs\BACKUP-RESTORE.md',
+        'docs\DISASTER-RECOVERY.md',
+        'docs\TEST-MATRIX.md',
+        'docs\releases\v1.3.0.md'
+    ) | Sort-Object
+}
+
+function Get-RestorCanonicalReleaseFileSha256 {
+    param(
+        [Parameter(Mandatory)][string]$Path,
+        [Parameter(Mandatory)][string]$RelativePath
+    )
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
+        throw ("Fichier absent pour hash canonique : " + $RelativePath)
+    }
+    $ext = [IO.Path]::GetExtension($RelativePath).ToLowerInvariant()
+    $binaryExtensions = @(
+        '.png', '.jpg', '.jpeg', '.gif', '.webp', '.ico',
+        '.exe', '.dll', '.bin', '.wim', '.sdi', '.efi'
+    )
+    if ($binaryExtensions -contains $ext) {
+        return (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToUpperInvariant()
+    }
+    $raw = [IO.File]::ReadAllBytes($Path)
+    $offset = 0
+    if ($raw.Length -ge 3 -and $raw[0] -eq 0xEF -and $raw[1] -eq 0xBB -and $raw[2] -eq 0xBF) {
+        $offset = 3
+    }
+    $text = [Text.Encoding]::UTF8.GetString($raw, $offset, $raw.Length - $offset)
+    $normalized = ($text -replace "`r`n", "`n") -replace "`r", "`n"
+    $bytes = [Text.Encoding]::UTF8.GetBytes($normalized)
+    $sha = [Security.Cryptography.SHA256]::Create()
+    try {
+        return ([BitConverter]::ToString($sha.ComputeHash($bytes))).Replace('-', '').ToUpperInvariant()
+    } finally {
+        $sha.Dispose()
+    }
+}
+
 Export-ModuleMember -Function @(
     'ConvertTo-NormalizedSerial',
     'Resolve-RestorDiskSelection',
@@ -137,5 +193,7 @@ Export-ModuleMember -Function @(
     'Get-RestorManifestLine',
     'Resolve-RestorPreRestoreRoot',
     'Test-RestorAdministrator',
-    'Exit-RestorCommand'
+    'Exit-RestorCommand',
+    'Get-RestorCriticalReleaseRelativePaths',
+    'Get-RestorCanonicalReleaseFileSha256'
 )

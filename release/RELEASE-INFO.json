@@ -1,0 +1,15 @@
+{
+  "Version": "1.3.0",
+  "Commit": "33c060b8aa2129a4b3daf7f2fe1915c08c1081da",
+  "GeneratedAt": "2026-09-27T14:09:55.4872499+02:00",
+  "Files": 19,
+  "Algorithm": "SHA256",
+  "BootMenuEntries": [
+    "WIN CODE",
+    "WIN VESTY",
+    "MEMTEST86+",
+    "RESCUEGRID",
+    "LOCKPICK"
+  ],
+  "ExpectedVestySha256": "CC67BBF03D668EE61DE3A4F620C3855DF4D2430F2D2BCB473658CF1CE53331F6"
+}

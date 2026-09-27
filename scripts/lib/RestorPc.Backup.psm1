@@ -8,23 +8,33 @@ Set-StrictMode -Version Latest
 $script:RestorVestyRelativePath = 'ESP\RESTOR-BOOT\EFI\BOOT\themes\restor-pc\assets\win_vesty.png'
 $script:RestorRefindRelativePath = 'ESP\RESTOR-BOOT\EFI\BOOT\refind.conf'
 $script:RestorBootWimRelativePath = 'RESTOR-TOOLS\RescueGrid\WinPE\boot.wim'
+$script:RestorBootSdiRelativePath = 'RESTOR-TOOLS\RescueGrid\WinPE\boot.sdi'
 $script:RestorDefaultVestySha256 = 'CC67BBF03D668EE61DE3A4F620C3855DF4D2430F2D2BCB473658CF1CE53331F6'
 
 function Get-RestorRequiredBackupRelativePath {
     @(
         'ESP\RESTOR-BOOT\EFI\BOOT\refind.conf',
         'ESP\RESTOR-BOOT\EFI\BOOT\BOOTX64.EFI',
-        'ESP\CODE-EFI',
-        'ESP\VESTY-EFI',
-        'ESP\RESCUE-EFI',
+        'ESP\RESTOR-BOOT\EFI\BOOT\themes\restor-pc\theme.conf',
+        'ESP\RESTOR-BOOT\EFI\TOOLS\MEMTEST\mt86plus.efi',
+        'ESP\CODE-EFI\EFI\Microsoft\Boot\bootmgfw.efi',
+        'ESP\VESTY-EFI\EFI\Microsoft\Boot\bootmgfw.efi',
+        'ESP\RESCUE-EFI\EFI\Microsoft\Boot\bootmgfw.efi',
         'ESP\LOCKPICK-EFI\EFI\BOOT\BOOTX64.EFI',
+        'ESP\LOCKPICK-EFI\EFI\Microsoft\Boot\BCD',
+        'ESP\LOCKPICK-EFI\boot\BCD',
+        'ESP\LOCKPICK-EFI\boot\boot.sdi',
+        'ESP\LOCKPICK-EFI\sources\boot.wim',
+        'ESP\LOCKPICK-EFI\Programs\Lockpick\Lockpick.exe',
         'BCD\CODE-EFI\BCD',
         'BCD\VESTY-EFI\BCD',
         'BCD\RESCUE-EFI\BCD',
         'Metadata\NVME-IDENTITY.txt',
         'Metadata\PARTITION-LAYOUT.json',
         'Metadata\REFIND-CONFIG.txt',
-        'Metadata\GIT-STATE.txt'
+        'Metadata\GIT-STATE.txt',
+        'RESTOR-TOOLS\RescueGrid\Project\agent\windows\Setup-WinPEDesktop.ps1',
+        'RESTOR-TOOLS\RescueGrid\Project\agent\windows\Start-RescueGrid.ps1'
     )
 }
 
@@ -34,6 +44,81 @@ function Test-RestorBackupMetadataPath {
     if ($comparer.Equals($RelativePath, 'BACKUP-INFO.json')) { return $true }
     if ($comparer.Equals($RelativePath, 'Manifests\SHA256-MANIFEST.txt')) { return $true }
     return $false
+}
+
+function Get-RestorExpectedRefindEntry {
+    @{
+        'WIN CODE'   = @{ Volume = 'CODE-EFI'; Loader = '\EFI\Microsoft\Boot\bootmgfw.efi' }
+        'WIN VESTY'  = @{ Volume = 'VESTY-EFI'; Loader = '\EFI\Microsoft\Boot\bootmgfw.efi' }
+        'MEMTEST86+' = @{ Volume = $null; Loader = '\EFI\TOOLS\MEMTEST\mt86plus.efi' }
+        'RESCUEGRID' = @{ Volume = 'RESCUE-EFI'; Loader = '\EFI\Microsoft\Boot\bootmgfw.efi' }
+        'LOCKPICK'   = @{ Volume = 'LOCKPICK-EFI'; Loader = '\EFI\BOOT\BOOTX64.EFI' }
+    }
+}
+
+function Test-RestorRefindConfigText {
+    param([Parameter(Mandatory)][string]$ConfigText)
+    $expected = Get-RestorExpectedRefindEntry
+    $entries = @{}
+    $current = $null
+    $scanforManual = $false
+    $problems = New-Object System.Collections.Generic.List[string]
+    foreach ($raw in @(($ConfigText -replace "`r`n", "`n") -split "`n")) {
+        $trim = $raw.Trim()
+        if ($trim.Length -eq 0 -or $trim.StartsWith('#')) { continue }
+        if ($trim -match '^scanfor\s+manual(\s+#.*)?$') {
+            $scanforManual = $true
+            continue
+        }
+        if ($trim -match '^menuentry\s+"([^"]+)"\s*\{') {
+            $name = $Matches[1]
+            if ($entries.ContainsKey($name)) {
+                $problems.Add(("Entrée {0} présente 2 fois." -f $name))
+            }
+            $current = @{ Name = $name; Volume = $null; Loader = $null }
+            $entries[$name] = $current
+            continue
+        }
+        if ($null -eq $current) { continue }
+        if ($trim -match '^volume\s+"([^"]+)"') {
+            $current.Volume = $Matches[1]
+            continue
+        }
+        if ($trim -match '^loader\s+(\S+)') {
+            $current.Loader = $Matches[1]
+            continue
+        }
+        if ($trim -eq '}') { $current = $null }
+    }
+    if (-not $scanforManual) {
+        $problems.Add('scanfor manual absent de refind.conf.')
+    }
+    foreach ($name in @($expected.Keys)) {
+        if (-not $entries.ContainsKey($name)) {
+            $problems.Add(("Entrée {0} présente 0 fois." -f $name))
+            continue
+        }
+        $entry = $entries[$name]
+        $want = $expected[$name]
+        if ($entry.Loader -ne $want.Loader) {
+            $problems.Add(("Entrée {0} : loader [{1}], attendu [{2}]." -f $name, $entry.Loader, $want.Loader))
+        }
+        if ($entry.Volume -ne $want.Volume) {
+            $problems.Add(("Entrée {0} : volume [{1}], attendu [{2}]." -f $name, $entry.Volume, $want.Volume))
+        }
+    }
+    foreach ($name in @($entries.Keys)) {
+        if (-not $expected.ContainsKey($name)) {
+            $problems.Add('Entrée rEFInd inattendue : ' + $name)
+        }
+    }
+    if ($entries.Count -ne $expected.Count) {
+        $problems.Add(("Nombre d entrées rEFInd = {0}, attendu {1}." -f $entries.Count, $expected.Count))
+    }
+    return [pscustomobject]@{
+        Valid    = ($problems.Count -eq 0)
+        Failures = [string[]]$problems.ToArray()
+    }
 }
 
 function Resolve-RestorBackupEntryPath {
@@ -206,7 +291,7 @@ function Test-RestorBackupIntegrity {
 
         foreach ($required in @(Get-RestorRequiredBackupRelativePath)) {
             $requiredFull = Join-Path $root $required
-            if (-not (Test-Path -LiteralPath $requiredFull)) {
+            if (-not (Test-Path -LiteralPath $requiredFull -PathType Leaf)) {
                 $structureFailures.Add($required)
                 $failures.Add('Structure absente : ' + $required)
             }
@@ -224,21 +309,24 @@ function Test-RestorBackupIntegrity {
         $configResolved = Resolve-RestorBackupEntryPath -BackupRoot $root -RelativePath $script:RestorRefindRelativePath
         if ($configResolved.Safe -and (Test-Path -LiteralPath $configResolved.FullPath -PathType Leaf)) {
             $configText = [IO.File]::ReadAllText($configResolved.FullPath)
-            $refindConfigValid = $true
-            foreach ($entryName in @('WIN CODE', 'WIN VESTY', 'MEMTEST86+', 'RESCUEGRID', 'LOCKPICK')) {
-                $count = ([regex]::Matches($configText, [regex]::Escape('menuentry "' + $entryName + '"'))).Count
-                if ($count -ne 1) {
-                    $refindConfigValid = $false
-                    $failures.Add(("Entrée {0} présente {1} fois." -f $entryName, $count))
-                }
+            $refindCheck = Test-RestorRefindConfigText -ConfigText $configText
+            $refindConfigValid = [bool]$refindCheck.Valid
+            foreach ($item in @($refindCheck.Failures)) {
+                $failures.Add([string]$item)
             }
+        } else {
+            $failures.Add('refind.conf absent de la copie RESTOR-BOOT.')
         }
 
         $wimResolved = Resolve-RestorBackupEntryPath -BackupRoot $root -RelativePath $script:RestorBootWimRelativePath
-        if ($wimResolved.Safe -and (Test-Path -LiteralPath $wimResolved.FullPath -PathType Leaf)) {
+        $sdiResolved = Resolve-RestorBackupEntryPath -BackupRoot $root -RelativePath $script:RestorBootSdiRelativePath
+        $hasWim = $wimResolved.Safe -and (Test-Path -LiteralPath $wimResolved.FullPath -PathType Leaf)
+        $hasSdi = $sdiResolved.Safe -and (Test-Path -LiteralPath $sdiResolved.FullPath -PathType Leaf)
+        if ($hasWim -and $hasSdi) {
             $rescueGridValid = $true
         } else {
-            $failures.Add('boot.wim RescueGrid absent de la sauvegarde.')
+            if (-not $hasWim) { $failures.Add('boot.wim RescueGrid absent de la sauvegarde.') }
+            if (-not $hasSdi) { $failures.Add('boot.sdi RescueGrid absent de la sauvegarde.') }
         }
     }
 
@@ -265,6 +353,93 @@ function Test-RestorBackupIntegrity {
     }
 }
 
+function Get-RestorManifestSnapshot {
+    param([Parameter(Mandatory)][string]$BackupPath)
+    $root = [IO.Path]::GetFullPath($BackupPath)
+    $manifestPath = Join-Path $root 'Manifests\SHA256-MANIFEST.txt'
+    if (-not (Test-Path -LiteralPath $manifestPath -PathType Leaf)) {
+        throw 'SHA256-MANIFEST.txt absent.'
+    }
+    $entries = New-Object System.Collections.ArrayList
+    $lines = @(Get-Content -LiteralPath $manifestPath -Encoding UTF8 | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+    foreach ($line in $lines) {
+        $manifestMatch = [regex]::Match([string]$line, '^([A-Fa-f0-9]{64})  (.+)$')
+        if (-not $manifestMatch.Success) { throw ('Ligne manifeste illisible : ' + $line) }
+        $relative = $manifestMatch.Groups[2].Value.Replace('/', '\')
+        $resolved = Resolve-RestorBackupEntryPath -BackupRoot $root -RelativePath $relative
+        if (-not $resolved.Safe) { throw ('Chemin manifeste dangereux : ' + $relative) }
+        [void]$entries.Add([pscustomobject]@{
+            RelativePath = $relative
+            Sha256       = $manifestMatch.Groups[1].Value.ToUpperInvariant()
+        })
+    }
+    return @($entries.ToArray())
+}
+
+function Test-RestorRestoredTarget {
+    param(
+        [Parameter(Mandatory)][string]$TargetName,
+        [Parameter(Mandatory)][string]$DestinationRoot,
+        [Parameter(Mandatory)]$ManifestSnapshot,
+        [string]$RelativePrefix = ''
+    )
+    $prefix = if ([string]::IsNullOrWhiteSpace($RelativePrefix)) {
+        'ESP\' + $TargetName + '\'
+    } else {
+        $RelativePrefix.Replace('/', '\').TrimEnd('\') + '\'
+    }
+    $missing = New-Object System.Collections.Generic.List[string]
+    $mismatches = New-Object System.Collections.Generic.List[string]
+    $expectedRelative = New-Object 'System.Collections.Generic.Dictionary[string,string]' ([StringComparer]::OrdinalIgnoreCase)
+    $filesExpected = 0
+    $filesVerified = 0
+    foreach ($entry in @($ManifestSnapshot)) {
+        $relative = [string]$entry.RelativePath
+        if (-not $relative.StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase)) { continue }
+        $leaf = $relative.Substring($prefix.Length)
+        $resolved = Resolve-RestorBackupEntryPath -BackupRoot $DestinationRoot -RelativePath $leaf
+        $filesExpected++
+        if (-not $resolved.Safe) {
+            $missing.Add($leaf)
+            continue
+        }
+        $expectedRelative[$leaf] = [string]$entry.Sha256
+        if (-not (Test-Path -LiteralPath $resolved.FullPath -PathType Leaf)) {
+            $missing.Add($leaf)
+            continue
+        }
+        $actual = (Get-FileHash -LiteralPath $resolved.FullPath -Algorithm SHA256).Hash
+        $filesVerified++
+        if (-not $actual.Equals([string]$entry.Sha256, [StringComparison]::OrdinalIgnoreCase)) {
+            $mismatches.Add($leaf)
+        }
+    }
+    $extra = 0
+    if (Test-Path -LiteralPath $DestinationRoot) {
+        $destRoot = (Resolve-Path -LiteralPath $DestinationRoot).ProviderPath
+        $destPrefix = $destRoot.TrimEnd('\') + [IO.Path]::DirectorySeparatorChar
+        $onDisk = @(Get-ChildItem -LiteralPath $DestinationRoot -Recurse -File -Force -ErrorAction SilentlyContinue)
+        foreach ($file in $onDisk) {
+            $full = (Resolve-Path -LiteralPath $file.FullName).ProviderPath
+            if (-not $full.StartsWith($destPrefix, [StringComparison]::OrdinalIgnoreCase)) { continue }
+            $relativeOnDisk = $full.Substring($destPrefix.Length)
+            if (-not $expectedRelative.ContainsKey($relativeOnDisk)) { $extra++ }
+        }
+    }
+    $valid = ($filesExpected -gt 0) -and ($missing.Count -eq 0) -and ($mismatches.Count -eq 0)
+    return [pscustomobject]@{
+        Target              = $TargetName
+        FilesExpected       = $filesExpected
+        FilesVerified       = $filesVerified
+        MissingFiles        = [string[]]$missing.ToArray()
+        HashMismatches      = [string[]]$mismatches.ToArray()
+        ExtraFilesPreserved = $extra
+        Valid               = $valid
+    }
+}
+
 Export-ModuleMember -Function @(
-    'Test-RestorBackupIntegrity'
+    'Test-RestorBackupIntegrity',
+    'Get-RestorManifestSnapshot',
+    'Test-RestorRestoredTarget'
 )

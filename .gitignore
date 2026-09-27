@@ -27,6 +27,12 @@ bootloader/refind/
 test/vhd/
 *.vhd
 *.vhdx
+*.iso
+
+# Artefacts generes (recovery media, rapports locaux)
+artifacts/
+RESTORE-RESULT.json
+RECOVERY-RESULT.json
 
 # Sorties de tests. Les fichiers *.Tests.ps1 restent versionnes.
 TestResults.xml

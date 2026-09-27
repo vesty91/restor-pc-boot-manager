@@ -1,16 +1,43 @@
 # Changelog
 
-## [Unreleased]
+## [1.3.0] - 2026-09-27
+
+### Added
+
+- Vérification SHA256 post-restore des fichiers écrits sur la destination (`Test-RestorRestoredTarget`).
+- Rapport structuré `RESTORE-RESULT.json` (statut `VALID` / `FAILED`).
+- Workflow de reconstruction d'un disque de remplacement vierge : `New-RestorRecoveryDisk.ps1`.
+- Laboratoire VHD Full Disaster Recovery : `Test-FullRecovery.ps1`.
+- Builder de recovery media : `Build-RestorRecoveryMedia.ps1` + launcher `Start-RestorRecovery.ps1`.
+- Manifeste de provenance release : `release/RELEASE-INTEGRITY.txt`, `release/RELEASE-INFO.json`, `Test-ReleaseIntegrity.ps1`.
+- Documentation `docs/DISASTER-RECOVERY.md`, `docs/TEST-MATRIX.md`, `docs/releases/v1.3.0.md`.
 
 ### Changed
 
-- `Restore -Apply` vérifie chaque payload du Golden Backup avant tout accès disque, puis revérifie l'intégrité et l'empreinte du manifeste immédiatement avant la copie.
+- `Restore -Apply` : double integrity gate, snapshot manifeste, copie, vérification destination, rapport.
+- README : trois modes (Maintenance / Restore / Full replacement recovery).
+
+### Fixed
+
+- Les échecs post-restore signalent clairement le chemin PRE-RESTORE sans prétendre un rollback.
+
+### Testing
+
+- Couverture Pester étendue (post-restore, recovery guards, recovery media staging).
+- Labs VHD : restore apply + full recovery sur VHDX isolés uniquement.
 
 ### Safety
 
-- Un payload corrompu, absent, inattendu ou un chemin de manifeste dangereux bloque `-Apply`.
-- Il n'existe pas de paramètre pour ignorer ce contrôle.
-- Les deux vérifications réduisent la fenêtre entre la lecture du backup et la copie. Elles ne constituent pas une authentification cryptographique, ni une garantie pendant l'exécution de `robocopy`.
+- Double backup integrity gate + comparaison de snapshot manifeste.
+- Recovery refuse disques partitionnés, IsBoot, IsSystem, identité incorrecte.
+- Confirmation case-sensitive `REBUILD-RESTOR-PC`.
+- Aucun `Clear-Disk` / `diskpart clean` dans le chemin recovery.
+- Pas de rollback destructif automatique de partitionnement.
+
+### Recovery
+
+- Staging recovery media sans Golden Backup embarqué ni ISO tiers.
+- ISO WinPE optionnelle si backend ADK/oscdimg + source fournis.
 
 ## [1.2.0] - 2026-09-27
 

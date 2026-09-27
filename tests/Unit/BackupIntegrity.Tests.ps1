@@ -125,4 +125,81 @@ Describe 'Test-RestorBackupIntegrity' {
         $result.Valid | Should -BeFalse
         @($result.DuplicateEntries).Count | Should -BeGreaterOrEqual 1
     }
+
+    It 'refuse un repertoire qui usurpe un chemin critique leaf' {
+        $root = New-RestorTestGoldenBackup -Root (Join-Path $TestDrive 'dir-as-leaf') -RepoRoot $script:RepoRoot
+        $target = Join-Path $root 'ESP\CODE-EFI\EFI\Microsoft\Boot\bootmgfw.efi'
+        Remove-Item -LiteralPath $target -Force
+        New-Item -ItemType Directory -Path $target -Force | Out-Null
+        $result = Test-RestorBackupIntegrity -BackupPath $root
+        $result.Valid | Should -BeFalse
+        @($result.StructureFailures) | Should -Contain 'ESP\CODE-EFI\EFI\Microsoft\Boot\bootmgfw.efi'
+    }
+
+    It 'refuse un Golden Backup sans chargeur MemTest86+' {
+        $root = New-RestorTestGoldenBackup -Root (Join-Path $TestDrive 'no-memtest') -RepoRoot $script:RepoRoot
+        $target = Join-Path $root 'ESP\RESTOR-BOOT\EFI\TOOLS\MEMTEST\mt86plus.efi'
+        Remove-Item -LiteralPath $target -Force
+        $result = Test-RestorBackupIntegrity -BackupPath $root
+        $result.Valid | Should -BeFalse
+        @($result.StructureFailures) | Should -Contain 'ESP\RESTOR-BOOT\EFI\TOOLS\MEMTEST\mt86plus.efi'
+    }
+
+    It 'refuse un Golden Backup sans chaine Lockpick complete' {
+        $root = New-RestorTestGoldenBackup -Root (Join-Path $TestDrive 'no-lockpick-wim') -RepoRoot $script:RepoRoot
+        $target = Join-Path $root 'ESP\LOCKPICK-EFI\sources\boot.wim'
+        Remove-Item -LiteralPath $target -Force
+        $result = Test-RestorBackupIntegrity -BackupPath $root
+        $result.Valid | Should -BeFalse
+        @($result.StructureFailures) | Should -Contain 'ESP\LOCKPICK-EFI\sources\boot.wim'
+    }
+
+    It 'refuse un Golden Backup sans Lockpick.exe' {
+        $root = New-RestorTestGoldenBackup -Root (Join-Path $TestDrive 'no-lockpick-exe') -RepoRoot $script:RepoRoot
+        $target = Join-Path $root 'ESP\LOCKPICK-EFI\Programs\Lockpick\Lockpick.exe'
+        Remove-Item -LiteralPath $target -Force
+        $result = Test-RestorBackupIntegrity -BackupPath $root
+        $result.Valid | Should -BeFalse
+        @($result.StructureFailures) | Should -Contain 'ESP\LOCKPICK-EFI\Programs\Lockpick\Lockpick.exe'
+    }
+
+    It 'refuse un Golden Backup sans Lockpick boot BCD' {
+        $root = New-RestorTestGoldenBackup -Root (Join-Path $TestDrive 'no-lockpick-boot-bcd') -RepoRoot $script:RepoRoot
+        $target = Join-Path $root 'ESP\LOCKPICK-EFI\boot\BCD'
+        Remove-Item -LiteralPath $target -Force
+        $result = Test-RestorBackupIntegrity -BackupPath $root
+        $result.Valid | Should -BeFalse
+        @($result.StructureFailures) | Should -Contain 'ESP\LOCKPICK-EFI\boot\BCD'
+    }
+
+    It 'refuse un Golden Backup sans scripts RescueGrid' {
+        $root = New-RestorTestGoldenBackup -Root (Join-Path $TestDrive 'no-rescuegrid-script') -RepoRoot $script:RepoRoot
+        $target = Join-Path $root 'RESTOR-TOOLS\RescueGrid\Project\agent\windows\Start-RescueGrid.ps1'
+        Remove-Item -LiteralPath $target -Force
+        $result = Test-RestorBackupIntegrity -BackupPath $root
+        $result.Valid | Should -BeFalse
+        @($result.StructureFailures) | Should -Contain 'RESTOR-TOOLS\RescueGrid\Project\agent\windows\Start-RescueGrid.ps1'
+    }
+
+    It 'refuse un refind.conf dont le loader est corrompu' {
+        $root = New-RestorTestGoldenBackup -Root (Join-Path $TestDrive 'bad-refind-loader') -RepoRoot $script:RepoRoot
+        $config = Join-Path $root 'ESP\RESTOR-BOOT\EFI\BOOT\refind.conf'
+        $text = [IO.File]::ReadAllText($config)
+        $text = $text.Replace('\EFI\Microsoft\Boot\bootmgfw.efi', '\EFI\Microsoft\Boot\WRONG.efi')
+        [IO.File]::WriteAllText($config, $text)
+        Update-RestorTestManifest -Root $root -Status 'VALID'
+        $result = Test-RestorBackupIntegrity -BackupPath $root
+        $result.Valid | Should -BeFalse
+        $result.RefindConfigValid | Should -BeFalse
+        ($result.Failures -join "`n") | Should -Match 'loader'
+    }
+
+    It 'refuse un Golden Backup sans theme.conf rEFInd' {
+        $root = New-RestorTestGoldenBackup -Root (Join-Path $TestDrive 'no-theme-conf') -RepoRoot $script:RepoRoot
+        $target = Join-Path $root 'ESP\RESTOR-BOOT\EFI\BOOT\themes\restor-pc\theme.conf'
+        Remove-Item -LiteralPath $target -Force
+        $result = Test-RestorBackupIntegrity -BackupPath $root
+        $result.Valid | Should -BeFalse
+        @($result.StructureFailures) | Should -Contain 'ESP\RESTOR-BOOT\EFI\BOOT\themes\restor-pc\theme.conf'
+    }
 }

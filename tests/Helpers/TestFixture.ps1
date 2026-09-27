@@ -75,10 +75,16 @@ function New-RestorTestGoldenBackup {
     }
     $files = @{
         'ESP\RESTOR-BOOT\EFI\BOOT\BOOTX64.EFI' = 'TEST EFI FILE RESTOR-BOOT'
+        'ESP\RESTOR-BOOT\EFI\TOOLS\MEMTEST\mt86plus.efi' = 'TEST EFI FILE MEMTEST'
         'ESP\CODE-EFI\EFI\Microsoft\Boot\bootmgfw.efi' = 'TEST EFI FILE CODE'
         'ESP\VESTY-EFI\EFI\Microsoft\Boot\bootmgfw.efi' = 'TEST EFI FILE VESTY'
         'ESP\RESCUE-EFI\EFI\Microsoft\Boot\bootmgfw.efi' = 'TEST EFI FILE RESCUE'
         'ESP\LOCKPICK-EFI\EFI\BOOT\BOOTX64.EFI' = 'TEST EFI FILE LOCKPICK'
+        'ESP\LOCKPICK-EFI\EFI\Microsoft\Boot\BCD' = 'TEST LOCKPICK EFI BCD'
+        'ESP\LOCKPICK-EFI\boot\BCD' = 'TEST LOCKPICK BOOT BCD'
+        'ESP\LOCKPICK-EFI\boot\boot.sdi' = 'TEST LOCKPICK BOOT SDI'
+        'ESP\LOCKPICK-EFI\sources\boot.wim' = 'TEST LOCKPICK BOOT WIM'
+        'ESP\LOCKPICK-EFI\Programs\Lockpick\Lockpick.exe' = 'TEST LOCKPICK EXE'
         'BCD\CODE-EFI\BCD' = 'TEST BCD CODE'
         'BCD\VESTY-EFI\BCD' = 'TEST BCD VESTY'
         'BCD\RESCUE-EFI\BCD' = 'TEST BCD RESCUE'
@@ -87,11 +93,18 @@ function New-RestorTestGoldenBackup {
         'Metadata\REFIND-CONFIG.txt' = 'synthetic refind copy'
         'Metadata\GIT-STATE.txt' = 'synthetic'
         'RESTOR-TOOLS\RescueGrid\WinPE\boot.wim' = 'TEST BOOT WIM PLACEHOLDER'
+        'RESTOR-TOOLS\RescueGrid\WinPE\boot.sdi' = 'TEST BOOT SDI PLACEHOLDER'
+        'RESTOR-TOOLS\RescueGrid\Project\agent\windows\Setup-WinPEDesktop.ps1' = '# TEST SETUP'
+        'RESTOR-TOOLS\RescueGrid\Project\agent\windows\Start-RescueGrid.ps1' = '# TEST START'
     }
     foreach ($relative in $files.Keys) {
         Write-RestorTextFile -Path (Join-Path $Root $relative) -Content $files[$relative]
     }
     Copy-Item -LiteralPath (Join-Path $RepoRoot 'config\refind.conf') -Destination (Join-Path $Root 'ESP\RESTOR-BOOT\EFI\BOOT\refind.conf') -Force
+    $themeConfSource = Join-Path $RepoRoot 'theme\restor-pc\theme.conf'
+    $themeConfDest = Join-Path $Root 'ESP\RESTOR-BOOT\EFI\BOOT\themes\restor-pc\theme.conf'
+    New-Item -ItemType Directory -Path (Split-Path -Parent $themeConfDest) -Force | Out-Null
+    Copy-Item -LiteralPath $themeConfSource -Destination $themeConfDest -Force
     $vestyDestination = Join-Path $Root 'ESP\RESTOR-BOOT\EFI\BOOT\themes\restor-pc\assets\win_vesty.png'
     $vestyParent = Split-Path -Parent $vestyDestination
     New-Item -ItemType Directory -Path $vestyParent -Force | Out-Null
