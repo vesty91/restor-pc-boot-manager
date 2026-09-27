@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
   Analyse statique des scripts QEMU. Ne lance pas QEMU.
 #>

@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
   Vérifie config\refind.conf sans accéder à un volume physique.
 #>

@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
   Vérifie la syntaxe de scripts\*.ps1 sans les exécuter.
 #>

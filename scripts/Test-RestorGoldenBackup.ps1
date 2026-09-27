@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
   Vérifie un Golden Backup RESTOR-PC sans toucher au NVMe.
 #>

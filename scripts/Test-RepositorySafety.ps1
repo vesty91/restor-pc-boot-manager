@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
   Vérifie que Git ne suit aucun fichier binaire interdit.
 #>

@@ -110,6 +110,8 @@ GitHub Actions : **RESTOR-PC CI** (`.github/workflows/ci.yml`).
 
 La CI ne touche jamais au matériel, ne monte pas de disque physique, ne lance pas QEMU et ne lance pas `Restore -Apply`.
 
+`Write-Host` reste le canal des lignes `[OK]`, `[WARN]` et `[ERROR]`. Les noms de fonctions internes au pluriel ne sont pas renommés. Les scripts PowerShell Unicode sont en UTF-8 avec BOM, pour Windows PowerShell et PowerShell 7. Les portes bloquantes sont dans `config/PSScriptAnalyzerSettings.psd1` : catch vide, variable automatique écrasée, paramètre inutilisé.
+
 ## Releases
 
 - [v1.1.0](docs/releases/v1.1.0.md)
