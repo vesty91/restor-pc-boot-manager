@@ -103,11 +103,14 @@ function Update-RestorRescueGridBcd {
 
     $guid = $null
     $osloaderEnum = & bcdedit.exe /store $store /enum osloader /v | Out-String
-    foreach ($block in ($osloaderEnum -split '(?m)(?=^(?:Identificateur|Identifier)\b)')) {
-        if ($block -match 'RESTOR-PC RESCUEGRID' -and $block -match '(\{[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}\})') {
-            $guid = $Matches[1]
-            break
-        }
+    # Language-agnostic: GUID of the object whose description is RESTOR-PC RESCUEGRID,
+    # without relying on localized Identificateur/Identifier headings.
+    $guidMatch = [regex]::Match(
+        $osloaderEnum,
+        '(?is)(\{[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}\})(?:(?!\{[0-9a-fA-F]{8}).)*?RESTOR-PC RESCUEGRID'
+    )
+    if ($guidMatch.Success) {
+        $guid = $guidMatch.Groups[1].Value
     }
     if ([string]::IsNullOrWhiteSpace($guid)) {
         $created = Invoke-RestorRecoveryBcd ("/store `"{0}`" /create /d `"RESTOR-PC RESCUEGRID`" /application osloader" -f $store)
@@ -128,13 +131,52 @@ function Update-RestorRescueGridBcd {
     Invoke-RestorRecoveryBcd ("/store `"{0}`" /set {1} device {2}" -f $store, $guid, $wimArg) | Out-Null
     Invoke-RestorRecoveryBcd ("/store `"{0}`" /set {1} osdevice {2}" -f $store, $guid, $wimArg) | Out-Null
 
+    $entryProbe = & bcdedit.exe /store $store /enum $guid /v | Out-String
+    if ($LASTEXITCODE -ne 0 -or $entryProbe -notmatch 'RESTOR-PC RESCUEGRID') {
+        throw ("BCD RescueGrid : l entree {0} n est pas RESTOR-PC RESCUEGRID." -f $guid)
+    }
+    if ($entryProbe -notmatch [regex]::Escape('\WinPE\RescueGrid\boot.wim')) {
+        throw ("BCD RescueGrid : boot.wim absent de l entree {0}." -f $guid)
+    }
+    if ($entryProbe -notmatch [regex]::Escape(('[{0}:]' -f $ToolsLetter)) -and $entryProbe -notmatch [regex]::Escape(('partition={0}:' -f $ToolsLetter))) {
+        throw ("BCD RescueGrid : device non retargete vers {0}: pour {1}." -f $ToolsLetter, $guid)
+    }
     $finalBcd = & bcdedit.exe /store $store /enum all /v | Out-String
     foreach ($token in @('RESTOR-PC RESCUEGRID', '\WinPE\RescueGrid\boot.wim', '\WinPE\RescueGrid\boot.sdi')) {
         if (-not $finalBcd.Contains($token)) {
             throw ("BCD RescueGrid incomplet apres retarget, jeton absent : " + $token)
         }
     }
-    Write-Step 'OK' ("BCD RescueGrid retargete vers {0}:\WinPE\RescueGrid" -f $ToolsLetter)
+    Write-Step 'OK' ("BCD RescueGrid retargete vers {0}:\WinPE\RescueGrid ({1})" -f $ToolsLetter, $guid)
+}
+
+function Get-RestorBackupTreeByteSize {
+    param([Parameter(Mandatory)][string]$Path)
+    if (-not (Test-Path -LiteralPath $Path -PathType Container)) { return [int64]0 }
+    $sum = (Get-ChildItem -LiteralPath $Path -Recurse -File -Force -ErrorAction Stop | Measure-Object -Property Length -Sum).Sum
+    if ($null -eq $sum) { return [int64]0 }
+    return [int64]$sum
+}
+
+function Test-RestorRecoveryPayloadFits {
+    param([Parameter(Mandatory)][string]$BackupRoot)
+    $checks = @(
+        @{ Name = 'RESTOR-BOOT'; Relative = 'ESP\RESTOR-BOOT'; Size = [int64]1GB; Factor = 0.90 },
+        @{ Name = 'CODE-EFI'; Relative = 'ESP\CODE-EFI'; Size = [int64]512MB; Factor = 0.90 },
+        @{ Name = 'VESTY-EFI'; Relative = 'ESP\VESTY-EFI'; Size = [int64]512MB; Factor = 0.90 },
+        @{ Name = 'RESCUE-EFI'; Relative = 'ESP\RESCUE-EFI'; Size = [int64]512MB; Factor = 0.90 },
+        @{ Name = 'LOCKPICK-EFI'; Relative = 'ESP\LOCKPICK-EFI'; Size = [int64]1GB; Factor = 0.90 },
+        @{ Name = 'RESTOR-TOOLS'; Relative = 'RESTOR-TOOLS'; Size = [int64]64GB; Factor = 0.98 }
+    )
+    foreach ($check in $checks) {
+        $source = Join-Path $BackupRoot $check.Relative
+        $bytes = Get-RestorBackupTreeByteSize -Path $source
+        $usable = [int64]([math]::Floor([double]$check.Size * [double]$check.Factor))
+        if ($bytes -gt $usable) {
+            throw ("Payload {0} trop volumineux pour la partition reconstruite ({1} octets > {2} utilisables sur {3})." -f $check.Name, $bytes, $usable, $check.Size)
+        }
+        Write-Step 'OK' ("Payload {0} : {1} octets / {2} utilisables." -f $check.Name, $bytes, $usable)
+    }
 }
 
 function Get-RestorBlankDiskCandidate {
@@ -364,8 +406,9 @@ $freeBytes = if ($candidate.State -eq 'EmptyGpt') {
 if ($freeBytes -lt $layoutBytes) {
     throw ("Espace libre insuffisant pour le layout RESTOR-PC ({0} octets libres, {1} requis)." -f $freeBytes, $layoutBytes)
 }
+Test-RestorRecoveryPayloadFits -BackupRoot $root
 if ($candidate.State -eq 'EmptyGpt') {
-    $reserved = @(Get-Partition -DiskNumber $DiskNumber -ErrorAction SilentlyContinue | Where-Object {
+    $reserved = @(Get-Partition -DiskNumber $DiskNumber -ErrorAction Stop | Where-Object {
         [string]$_.Type -eq 'Reserved' -or ([string]$_.GptType).ToLowerInvariant() -eq $MsrType.ToLowerInvariant()
     })
     foreach ($entry in $reserved) {
@@ -411,7 +454,7 @@ try {
         Write-Step 'OK' 'GPT initialized'
     }
 
-    $existingMsr = @(Get-Partition -DiskNumber $DiskNumber -ErrorAction SilentlyContinue | Where-Object {
+    $existingMsr = @(Get-Partition -DiskNumber $DiskNumber -ErrorAction Stop | Where-Object {
         [string]$_.Type -eq 'Reserved' -or ([string]$_.GptType).ToLowerInvariant() -eq $MsrType.ToLowerInvariant()
     })
     if ($existingMsr.Count -eq 0) {

@@ -91,6 +91,42 @@ Describe 'New-RestorRecoveryDisk offline guards' {
         $global:InitCalls | Should -Be 0
     }
 
+    It 'refuse un payload CODE-EFI trop volumineux avant partitionnement' {
+        $root = New-RestorTestGoldenBackup -Root (Join-Path $TestDrive 'efi-too-big') -RepoRoot $script:RepoRoot
+        $pad = Join-Path $root 'ESP\CODE-EFI\OVERSIZE.BIN'
+        $fs = [IO.File]::Open($pad, [IO.FileMode]::Create, [IO.FileAccess]::Write, [IO.FileShare]::None)
+        try {
+            $fs.SetLength([int64]500MB)
+        } finally {
+            $fs.Dispose()
+        }
+        Update-RestorTestManifest -Root $root -Status 'VALID'
+        Mock Get-Disk {
+            [pscustomobject]@{
+                FriendlyName      = 'RESTOR-PC TEST NVME'
+                SerialNumber      = 'TEST_SERIAL_0001'
+                PartitionStyle    = 'RAW'
+                Number            = 42
+                IsBoot            = $false
+                IsSystem          = $false
+                Size              = [int64]80GB
+                LargestFreeExtent = [int64]80GB
+            }
+        }
+        Mock Get-Partition { @() }
+        $result = Invoke-RestorChecked -Path $script:RecoveryScript -Parameter @{
+            DiskNumber      = 42
+            BackupPath      = $root
+            ExpectedModel   = 'RESTOR-PC TEST NVME'
+            ExpectedSerial  = 'TEST_SERIAL_0001'
+            Apply           = $true
+            ConfirmRebuild  = 'REBUILD-RESTOR-PC'
+        }
+        $result.Code | Should -Be 1
+        $global:InitCalls | Should -Be 0
+        ($result.Error + ($result.Output -join "`n")) | Should -Match 'trop volumineux|CODE-EFI'
+    }
+
     It 'echoue ferme si Get-Partition leve une erreur sur GPT' {
         $root = New-RestorTestGoldenBackup -Root (Join-Path $TestDrive 'partition-enum-fail') -RepoRoot $script:RepoRoot
         Mock Get-Disk {

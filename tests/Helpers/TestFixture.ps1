@@ -83,6 +83,7 @@ function New-RestorTestGoldenBackup {
         'ESP\LOCKPICK-EFI\EFI\Microsoft\Boot\BCD' = 'TEST LOCKPICK EFI BCD'
         'ESP\LOCKPICK-EFI\boot\boot.sdi' = 'TEST LOCKPICK BOOT SDI'
         'ESP\LOCKPICK-EFI\sources\boot.wim' = 'TEST LOCKPICK BOOT WIM'
+        'ESP\LOCKPICK-EFI\Programs\Lockpick\Lockpick.exe' = 'TEST LOCKPICK EXE'
         'BCD\CODE-EFI\BCD' = 'TEST BCD CODE'
         'BCD\VESTY-EFI\BCD' = 'TEST BCD VESTY'
         'BCD\RESCUE-EFI\BCD' = 'TEST BCD RESCUE'
