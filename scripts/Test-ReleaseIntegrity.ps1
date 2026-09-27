@@ -9,6 +9,7 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+Import-Module (Join-Path $PSScriptRoot 'lib\RestorPc.Common.psm1') -Force
 
 if ([string]::IsNullOrWhiteSpace($RepoRoot)) {
     $RepoRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
@@ -35,9 +36,22 @@ if (-not (Test-Path -LiteralPath $infoPath -PathType Leaf)) {
 }
 
 $info = Get-Content -LiteralPath $infoPath -Raw -Encoding UTF8 | ConvertFrom-Json
-if ([string]::IsNullOrWhiteSpace([string]$info.Commit) -or [string]$info.Commit -eq 'pending-release-tag') {
+$commitId = [string]$info.Commit
+if ([string]::IsNullOrWhiteSpace($commitId) -or $commitId -eq 'pending-release-tag') {
     $failed = $true
     Write-Step 'ERROR' 'RELEASE-INFO.json.Commit doit identifier un commit source reel.'
+} elseif ($commitId -notmatch '^[0-9a-fA-F]{40}$') {
+    $failed = $true
+    Write-Step 'ERROR' 'RELEASE-INFO.json.Commit doit etre un SHA-1 complet (40 hex).'
+} else {
+    $resolved = (& git -C $RepoRoot rev-parse --verify ($commitId + '^{commit}') 2>$null)
+    if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace([string]$resolved)) {
+        $failed = $true
+        Write-Step 'ERROR' ("RELEASE-INFO.json.Commit introuvable dans le depot : " + $commitId)
+    } elseif (-not ([string]$resolved).Trim().Equals($commitId, [StringComparison]::OrdinalIgnoreCase)) {
+        $failed = $true
+        Write-Step 'ERROR' ("RELEASE-INFO.json.Commit ne resout pas au SHA attendu : " + $commitId)
+    }
 }
 if ([string]$info.Algorithm -ne 'SHA256') {
     $failed = $true
@@ -103,6 +117,29 @@ foreach ($raw in @(Get-Content -LiteralPath $integrityPath)) {
 if ([int]$info.Files -ne $seen.Count) {
     $failed = $true
     Write-Step 'ERROR' ("Files={0} mais manifeste={1}" -f $info.Files, $seen.Count)
+}
+
+$canonical = @(Get-RestorCriticalReleaseRelativePaths)
+if ($seen.Count -ne $canonical.Count) {
+    $failed = $true
+    Write-Step 'ERROR' ("Manifeste={0} fichiers, canonique={1}." -f $seen.Count, $canonical.Count)
+}
+foreach ($relative in $canonical) {
+    if (-not $seen.Contains($relative)) {
+        $failed = $true
+        Write-Step 'ERROR' ("Fichier critique absent du manifeste : " + $relative)
+    }
+    $fullCanonical = Join-Path $RepoRoot $relative
+    if (-not (Test-Path -LiteralPath $fullCanonical -PathType Leaf)) {
+        $failed = $true
+        Write-Step 'ERROR' ("Fichier critique absent du depot : " + $relative)
+    }
+}
+foreach ($relative in @($seen)) {
+    if ($canonical -notcontains $relative) {
+        $failed = $true
+        Write-Step 'ERROR' ("Entree manifeste hors liste canonique : " + $relative)
+    }
 }
 
 if ($failed) {

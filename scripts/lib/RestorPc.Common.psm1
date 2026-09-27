@@ -128,6 +128,30 @@ function Exit-RestorCommand {
     exit $Code
 }
 
+function Get-RestorCriticalReleaseRelativePaths {
+    @(
+        'config\refind.conf',
+        'scripts\Backup-RestorBootManager.ps1',
+        'scripts\Restore-RestorBootManager.ps1',
+        'scripts\New-RestorRecoveryDisk.ps1',
+        'scripts\Build-RestorRecoveryMedia.ps1',
+        'scripts\Test-RestorGoldenBackup.ps1',
+        'scripts\Test-ReleaseIntegrity.ps1',
+        'scripts\New-ReleaseIntegrityManifest.ps1',
+        'scripts\lib\RestorPc.Common.psm1',
+        'scripts\lib\RestorPc.Backup.psm1',
+        'theme\restor-pc\assets\win_code.png',
+        'theme\restor-pc\assets\win_vesty.png',
+        'theme\restor-pc\assets\memtest86plus.png',
+        'theme\restor-pc\assets\rescuegrid.png',
+        'theme\restor-pc\assets\lockpick.png',
+        'docs\BACKUP-RESTORE.md',
+        'docs\DISASTER-RECOVERY.md',
+        'docs\TEST-MATRIX.md',
+        'docs\releases\v1.3.0.md'
+    ) | Sort-Object
+}
+
 Export-ModuleMember -Function @(
     'ConvertTo-NormalizedSerial',
     'Resolve-RestorDiskSelection',
@@ -137,5 +161,6 @@ Export-ModuleMember -Function @(
     'Get-RestorManifestLine',
     'Resolve-RestorPreRestoreRoot',
     'Test-RestorAdministrator',
-    'Exit-RestorCommand'
+    'Exit-RestorCommand',
+    'Get-RestorCriticalReleaseRelativePaths'
 )

@@ -14,28 +14,9 @@ $ErrorActionPreference = 'Stop'
 $repoRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 $releaseDir = Join-Path $repoRoot 'release'
 New-Item -ItemType Directory -Path $releaseDir -Force | Out-Null
+Import-Module (Join-Path $PSScriptRoot 'lib\RestorPc.Common.psm1') -Force
 
-$patterns = @(
-    'config\refind.conf',
-    'scripts\Backup-RestorBootManager.ps1',
-    'scripts\Restore-RestorBootManager.ps1',
-    'scripts\New-RestorRecoveryDisk.ps1',
-    'scripts\Build-RestorRecoveryMedia.ps1',
-    'scripts\Test-RestorGoldenBackup.ps1',
-    'scripts\Test-ReleaseIntegrity.ps1',
-    'scripts\New-ReleaseIntegrityManifest.ps1',
-    'scripts\lib\RestorPc.Common.psm1',
-    'scripts\lib\RestorPc.Backup.psm1',
-    'theme\restor-pc\assets\win_code.png',
-    'theme\restor-pc\assets\win_vesty.png',
-    'theme\restor-pc\assets\memtest86plus.png',
-    'theme\restor-pc\assets\rescuegrid.png',
-    'theme\restor-pc\assets\lockpick.png',
-    'docs\BACKUP-RESTORE.md',
-    'docs\DISASTER-RECOVERY.md',
-    'docs\TEST-MATRIX.md',
-    'docs\releases\v1.3.0.md'
-)
+$patterns = @(Get-RestorCriticalReleaseRelativePaths)
 
 $lines = New-Object System.Collections.Generic.List[string]
 $fileCount = 0
