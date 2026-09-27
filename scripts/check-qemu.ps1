@@ -106,6 +106,8 @@ function Invoke-QemuCheck {
         Write-InstallHints
         return 1
     }
+    Write-QemuStep 'OK' 'QEMU détecté'
+    Write-QemuStep 'OK' 'OVMF détecté'
     return 0
 }
 

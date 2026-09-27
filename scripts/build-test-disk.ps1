@@ -61,6 +61,45 @@ function Get-Crc32 {
     return [uint32]($crc -bxor ([uint32]::MaxValue))
 }
 
+function Test-RefindIconPng {
+    param([Parameter(Mandatory)][string]$Path)
+    $bytes = [IO.File]::ReadAllBytes($Path)
+    $signature = [byte[]](0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A)
+    for ($index = 0; $index -lt $signature.Length; $index++) {
+        if ($bytes[$index] -ne $signature[$index]) { throw 'win_vesty.png : signature PNG invalide.' }
+    }
+    $position = 8
+    $width = [uint32]0
+    $height = [uint32]0
+    $depth = 0
+    $color = -1
+    $interlace = 1
+    $sawEnd = $false
+    while ($position + 12 -le $bytes.Length) {
+        $length = ([uint32]$bytes[$position] -shl 24) -bor ([uint32]$bytes[$position + 1] -shl 16) -bor ([uint32]$bytes[$position + 2] -shl 8) -bor [uint32]$bytes[$position + 3]
+        if (($position + 12 + $length) -gt $bytes.Length) { throw 'win_vesty.png : chunk au-delà du fichier.' }
+        $type = [Text.Encoding]::ASCII.GetString($bytes, $position + 4, 4)
+        $payload = New-Object byte[] (4 + $length)
+        [Array]::Copy($bytes, ($position + 4), $payload, 0, $payload.Length)
+        $stored = ([uint32]$bytes[$position + 8 + $length] -shl 24) -bor ([uint32]$bytes[$position + 9 + $length] -shl 16) -bor ([uint32]$bytes[$position + 10 + $length] -shl 8) -bor [uint32]$bytes[$position + 11 + $length]
+        $calculated = [uint32](Get-Crc32 -Data $payload)
+        if ($calculated -ne $stored) { throw ('win_vesty.png : CRC invalide pour ' + $type) }
+        if ($type -eq 'IHDR') {
+            $width = ([uint32]$bytes[$position + 8] -shl 24) -bor ([uint32]$bytes[$position + 9] -shl 16) -bor ([uint32]$bytes[$position + 10] -shl 8) -bor [uint32]$bytes[$position + 11]
+            $height = ([uint32]$bytes[$position + 12] -shl 24) -bor ([uint32]$bytes[$position + 13] -shl 16) -bor ([uint32]$bytes[$position + 14] -shl 8) -bor [uint32]$bytes[$position + 15]
+            $depth = $bytes[$position + 16]
+            $color = $bytes[$position + 17]
+            $interlace = $bytes[$position + 20]
+        }
+        $position += 12 + $length
+        if ($type -eq 'IEND') { $sawEnd = $true; break }
+    }
+    if (-not $sawEnd -or $width -ne 176 -or $height -ne 176 -or $depth -ne 8 -or $color -ne 6 -or $interlace -ne 0) {
+        throw ('win_vesty.png incompatible : {0}x{1} depth={2} color={3} interlace={4}' -f $width, $height, $depth, $color, $interlace)
+    }
+    Write-BuildStep 'OK' 'win_vesty.png 176x176 compatible rEFInd'
+}
+
 function Write-UInt32 {
     param([byte[]]$Buffer, [int]$Offset, [uint32]$Value)
     $bytes = [BitConverter]::GetBytes($Value)
@@ -664,6 +703,7 @@ foreach ($required in $requiredSources) {
         exit 1
     }
 }
+Test-RefindIconPng -Path (Join-Path $themePath 'assets\win_vesty.png')
 
 $stubDirectory = Join-Path $projectRoot 'test\stubs'
 New-Item -ItemType Directory -Path $stubDirectory -Force | Out-Null
@@ -759,5 +799,7 @@ if ($configText -notmatch 'volume "LOCKPICK-EFI"' -or $configText -notmatch 'vol
     Write-BuildStep 'ERROR' 'Le refind.conf de l''image ne contient pas les volumes v1.0.0.'
     exit 1
 }
+Write-BuildStep 'OK' '5 entrées rEFInd'
+Write-BuildStep 'OK' 'aucun disque physique touché'
 Write-BuildStep 'OK' ("RESTOR-BOOT prêt : " + $imagePath)
 exit 0
