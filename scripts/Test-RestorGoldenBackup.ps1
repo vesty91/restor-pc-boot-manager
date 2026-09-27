@@ -41,7 +41,7 @@ if ([string]$info.ManifestSha256 -ne $manifestHash) { Add-Failure 'ManifestSha25
 else { Write-Step 'OK' ("Manifest SHA256 " + $manifestHash) }
 
 $lines = @(Get-Content -LiteralPath $manifestPath -Encoding UTF8 | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
-$sorted = @($lines | Sort-Object)
+$sorted = @($lines | Sort-Object { $_.Substring(66) })
 if (($lines -join "`n") -ne ($sorted -join "`n")) { Add-Failure 'Le manifeste n''est pas trié.' }
 $seen = @{}
 foreach ($line in $lines) {
