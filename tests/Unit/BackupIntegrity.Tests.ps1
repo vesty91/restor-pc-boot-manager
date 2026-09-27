@@ -156,10 +156,10 @@ Describe 'Test-RestorBackupIntegrity' {
 
     It 'refuse un Golden Backup sans scripts RescueGrid' {
         $root = New-RestorTestGoldenBackup -Root (Join-Path $TestDrive 'no-rescuegrid-script') -RepoRoot $script:RepoRoot
-        $target = Join-Path $root 'RESTOR-TOOLS\RescueGrid\agent\windows\Start-RescueGrid.ps1'
+        $target = Join-Path $root 'RESTOR-TOOLS\RescueGrid\Project\agent\windows\Start-RescueGrid.ps1'
         Remove-Item -LiteralPath $target -Force
         $result = Test-RestorBackupIntegrity -BackupPath $root
         $result.Valid | Should -BeFalse
-        @($result.StructureFailures) | Should -Contain 'RESTOR-TOOLS\RescueGrid\agent\windows\Start-RescueGrid.ps1'
+        @($result.StructureFailures) | Should -Contain 'RESTOR-TOOLS\RescueGrid\Project\agent\windows\Start-RescueGrid.ps1'
     }
 }

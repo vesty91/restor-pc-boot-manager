@@ -92,8 +92,8 @@ function New-RestorTestGoldenBackup {
         'Metadata\GIT-STATE.txt' = 'synthetic'
         'RESTOR-TOOLS\RescueGrid\WinPE\boot.wim' = 'TEST BOOT WIM PLACEHOLDER'
         'RESTOR-TOOLS\RescueGrid\WinPE\boot.sdi' = 'TEST BOOT SDI PLACEHOLDER'
-        'RESTOR-TOOLS\RescueGrid\agent\windows\Setup-WinPEDesktop.ps1' = '# TEST SETUP'
-        'RESTOR-TOOLS\RescueGrid\agent\windows\Start-RescueGrid.ps1' = '# TEST START'
+        'RESTOR-TOOLS\RescueGrid\Project\agent\windows\Setup-WinPEDesktop.ps1' = '# TEST SETUP'
+        'RESTOR-TOOLS\RescueGrid\Project\agent\windows\Start-RescueGrid.ps1' = '# TEST START'
     }
     foreach ($relative in $files.Keys) {
         Write-RestorTextFile -Path (Join-Path $Root $relative) -Content $files[$relative]

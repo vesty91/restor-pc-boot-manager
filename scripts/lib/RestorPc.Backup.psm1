@@ -30,8 +30,8 @@ function Get-RestorRequiredBackupRelativePath {
         'Metadata\PARTITION-LAYOUT.json',
         'Metadata\REFIND-CONFIG.txt',
         'Metadata\GIT-STATE.txt',
-        'RESTOR-TOOLS\RescueGrid\agent\windows\Setup-WinPEDesktop.ps1',
-        'RESTOR-TOOLS\RescueGrid\agent\windows\Start-RescueGrid.ps1'
+        'RESTOR-TOOLS\RescueGrid\Project\agent\windows\Setup-WinPEDesktop.ps1',
+        'RESTOR-TOOLS\RescueGrid\Project\agent\windows\Start-RescueGrid.ps1'
     )
 }
 
