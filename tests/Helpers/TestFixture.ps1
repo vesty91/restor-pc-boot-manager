@@ -101,6 +101,10 @@ function New-RestorTestGoldenBackup {
         Write-RestorTextFile -Path (Join-Path $Root $relative) -Content $files[$relative]
     }
     Copy-Item -LiteralPath (Join-Path $RepoRoot 'config\refind.conf') -Destination (Join-Path $Root 'ESP\RESTOR-BOOT\EFI\BOOT\refind.conf') -Force
+    $themeConfSource = Join-Path $RepoRoot 'theme\restor-pc\theme.conf'
+    $themeConfDest = Join-Path $Root 'ESP\RESTOR-BOOT\EFI\BOOT\themes\restor-pc\theme.conf'
+    New-Item -ItemType Directory -Path (Split-Path -Parent $themeConfDest) -Force | Out-Null
+    Copy-Item -LiteralPath $themeConfSource -Destination $themeConfDest -Force
     $vestyDestination = Join-Path $Root 'ESP\RESTOR-BOOT\EFI\BOOT\themes\restor-pc\assets\win_vesty.png'
     $vestyParent = Split-Path -Parent $vestyDestination
     New-Item -ItemType Directory -Path $vestyParent -Force | Out-Null

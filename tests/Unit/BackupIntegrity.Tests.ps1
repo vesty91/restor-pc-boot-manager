@@ -193,4 +193,13 @@ Describe 'Test-RestorBackupIntegrity' {
         $result.RefindConfigValid | Should -BeFalse
         ($result.Failures -join "`n") | Should -Match 'loader'
     }
+
+    It 'refuse un Golden Backup sans theme.conf rEFInd' {
+        $root = New-RestorTestGoldenBackup -Root (Join-Path $TestDrive 'no-theme-conf') -RepoRoot $script:RepoRoot
+        $target = Join-Path $root 'ESP\RESTOR-BOOT\EFI\BOOT\themes\restor-pc\theme.conf'
+        Remove-Item -LiteralPath $target -Force
+        $result = Test-RestorBackupIntegrity -BackupPath $root
+        $result.Valid | Should -BeFalse
+        @($result.StructureFailures) | Should -Contain 'ESP\RESTOR-BOOT\EFI\BOOT\themes\restor-pc\theme.conf'
+    }
 }
