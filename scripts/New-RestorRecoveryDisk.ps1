@@ -121,6 +121,7 @@ function New-RestorRecoveryPartition {
         } else {
             Format-Volume -DriveLetter $letter -FileSystem NTFS -NewFileSystemLabel $Label -Confirm:$false -Force | Out-Null
         }
+        Set-RestorRecoveryGptName -Letter $letter -Name $Name -ExpectedGptType $GptType
         $volume = Get-Volume -DriveLetter $letter
         [void]$script:PartitionsCreated.Add([pscustomobject]@{
             Name            = $Name
@@ -144,6 +145,78 @@ function New-RestorRecoveryPartition {
         FileSystem      = ''
     })
     Write-Step 'OK' ("{0} cree (MSR)" -f $Name)
+}
+
+function Initialize-RestorGptNameType {
+    if ('RestorRecoveryGptName' -as [type]) { return }
+    Add-Type -TypeDefinition @'
+using System;
+using System.ComponentModel;
+using System.Runtime.InteropServices;
+using Microsoft.Win32.SafeHandles;
+public static class RestorRecoveryGptName {
+    [DllImport("kernel32.dll", SetLastError=true, CharSet=CharSet.Unicode)]
+    static extern SafeFileHandle CreateFile(string name, uint access, uint share, IntPtr sec, uint disp, uint flags, IntPtr template);
+    [DllImport("kernel32.dll", SetLastError=true)]
+    static extern bool DeviceIoControl(SafeFileHandle handle, uint code, IntPtr inBuffer, uint inSize, IntPtr outBuffer, uint outSize, out uint returned, IntPtr overlapped);
+    public static byte[] Get(string path) {
+        var handle = CreateFile(path, 0x80000000, 3, IntPtr.Zero, 3, 0, IntPtr.Zero);
+        if (handle.IsInvalid) throw new Win32Exception(Marshal.GetLastWin32Error());
+        var buffer = Marshal.AllocHGlobal(144);
+        try {
+            uint returned;
+            if (!DeviceIoControl(handle, 0x00070048, IntPtr.Zero, 0, buffer, 144, out returned, IntPtr.Zero))
+                throw new Win32Exception(Marshal.GetLastWin32Error());
+            var data = new byte[144];
+            Marshal.Copy(buffer, data, 0, 144);
+            return data;
+        } finally { Marshal.FreeHGlobal(buffer); handle.Dispose(); }
+    }
+    public static void SetName(string path, byte[] info) {
+        var handle = CreateFile(path, 0xC0000000, 3, IntPtr.Zero, 3, 0, IntPtr.Zero);
+        if (handle.IsInvalid) throw new Win32Exception(Marshal.GetLastWin32Error());
+        var buffer = Marshal.AllocHGlobal(info.Length);
+        try {
+            Marshal.Copy(info, 0, buffer, info.Length);
+            uint returned;
+            if (!DeviceIoControl(handle, 0x0007C04C, buffer, (uint)info.Length, buffer, (uint)info.Length, out returned, IntPtr.Zero))
+                throw new Win32Exception(Marshal.GetLastWin32Error());
+        } finally { Marshal.FreeHGlobal(buffer); handle.Dispose(); }
+    }
+}
+'@
+}
+
+function Set-RestorRecoveryGptName {
+    param(
+        [Parameter(Mandatory)][string]$Letter,
+        [Parameter(Mandatory)][string]$Name,
+        [Parameter(Mandatory)][string]$ExpectedGptType
+    )
+    Initialize-RestorGptNameType
+    $path = '\\.\' + $Letter + ':'
+    $info = [RestorRecoveryGptName]::Get($path)
+    $typeBytes = ([guid]$ExpectedGptType).ToByteArray()
+    for ($i = 0; $i -lt 16; $i++) {
+        if ($info[32 + $i] -ne $typeBytes[$i]) {
+            throw ("Type GPT inattendu avant renommage de {0}." -f $Name)
+        }
+    }
+    $setBuffer = New-Object byte[] 120
+    $setBuffer[0] = 1
+    [Array]::Copy($info, 32, $setBuffer, 8, 40)
+    $chars = New-Object char[] 36
+    $source = $Name.ToCharArray()
+    [Array]::Copy($source, $chars, [Math]::Min($source.Length, 35))
+    $nameBytes = [Text.Encoding]::Unicode.GetBytes($chars)
+    [Array]::Copy($nameBytes, 0, $setBuffer, 48, 72)
+    [RestorRecoveryGptName]::SetName($path, $setBuffer)
+    $check = [RestorRecoveryGptName]::Get($path)
+    $read = [Text.Encoding]::Unicode.GetString($check, 72, 72).Trim([char]0)
+    if ($read -ne $Name) {
+        throw ("Nom GPT relu = [{0}], attendu [{1}]." -f $read, $Name)
+    }
+    Write-Step 'OK' ("Nom GPT : " + $Name)
 }
 
 function Write-RestorRecoveryResult {
@@ -181,6 +254,10 @@ $manifestSnapshot = @(Get-RestorManifestSnapshot -BackupPath $root)
 
 $candidate = Get-RestorBlankDiskCandidate -Number $DiskNumber -Model $ExpectedModel -Serial $ExpectedSerial
 $disk = $candidate.Disk
+$layoutBytes = [int64](16MB + 1GB + 512MB + 512MB + 64GB + 512MB + 1GB + 64MB)
+if ([int64]$disk.Size -lt $layoutBytes) {
+    throw ("Disque trop petit pour le layout RESTOR-PC ({0} octets requis)." -f $layoutBytes)
+}
 Write-Step 'OK' ("Disque cible valide, etat {0}, numero {1}." -f $candidate.State, $disk.Number)
 
 $layoutPreview = @(
@@ -273,6 +350,12 @@ try {
         $toolsLetter = $byName['RESTOR-TOOLS'].DriveLetter
         & robocopy.exe $toolsSource ($toolsLetter + ':\') '/E' '/COPY:DAT' '/DCOPY:DAT' '/R:2' '/W:1' '/XJ' | Out-Null
         if ($LASTEXITCODE -ge 8) { throw 'Copie RESTOR-TOOLS echouee.' }
+        $toolsCheck = Test-RestorRestoredTarget -TargetName 'RESTOR-TOOLS' -DestinationRoot ($toolsLetter + ':\') -ManifestSnapshot $manifestSnapshot -RelativePrefix 'RESTOR-TOOLS'
+        $filesRestored += [int]$toolsCheck.FilesExpected
+        $filesVerified += [int]$toolsCheck.FilesVerified
+        foreach ($item in @($toolsCheck.HashMismatches)) { if ($item) { $hashMismatches.Add('RESTOR-TOOLS\' + $item) } }
+        foreach ($item in @($toolsCheck.MissingFiles)) { if ($item) { $hashMismatches.Add('MISSING RESTOR-TOOLS\' + $item) } }
+        if (-not $toolsCheck.Valid) { throw 'Post-restore verification failed for RESTOR-TOOLS.' }
         Write-Step 'OK' 'RESTOR-TOOLS restaure.'
     }
 

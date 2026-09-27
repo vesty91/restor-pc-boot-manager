@@ -18,12 +18,14 @@ if ([string]::IsNullOrWhiteSpace($OutputRoot)) {
     $OutputRoot = Join-Path $repoRoot 'artifacts\recovery-media'
 }
 $out = [IO.Path]::GetFullPath($OutputRoot)
-$repoFull = [IO.Path]::GetFullPath($repoRoot)
-if (-not $out.StartsWith($repoFull, [StringComparison]::OrdinalIgnoreCase)) {
-    throw 'OutputRoot doit rester sous la racine du depot.'
-}
-if ($out.Equals($repoFull, [StringComparison]::OrdinalIgnoreCase)) {
+$repoFull = [IO.Path]::GetFullPath($repoRoot).TrimEnd('\')
+$outNormalized = $out.TrimEnd('\')
+$boundary = $repoFull + [IO.Path]::DirectorySeparatorChar
+if ($outNormalized.Equals($repoFull, [StringComparison]::OrdinalIgnoreCase)) {
     throw 'OutputRoot ne peut pas etre la racine du depot.'
+}
+if (-not $outNormalized.StartsWith($boundary, [StringComparison]::OrdinalIgnoreCase)) {
+    throw 'OutputRoot doit rester sous la racine du depot.'
 }
 
 function Write-Step {
@@ -162,16 +164,26 @@ if (-not [string]::IsNullOrWhiteSpace($BootWim) -and (Test-Path -LiteralPath $Bo
 }
 
 if ($hasWinPe -and $oscdimg) {
-    $isoRoot = Join-Path $out 'iso-root'
-    New-Item -ItemType Directory -Path (Join-Path $isoRoot 'sources') -Force | Out-Null
-    Copy-Item -LiteralPath $bootWimPath -Destination (Join-Path $isoRoot 'sources\boot.wim') -Force
-    Copy-Item -LiteralPath $staging -Destination (Join-Path $isoRoot 'RestorPc') -Recurse -Force
-    & $oscdimg '-u2' '-udfver102' $isoRoot $isoPath
-    if ($LASTEXITCODE -eq 0 -and (Test-Path -LiteralPath $isoPath)) {
-        $isoBuilt = $true
-        Write-Step 'OK' ("ISO creee : " + $isoPath)
+    $adkRoot = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $oscdimg))
+    $etfsboot = Join-Path $adkRoot 'amd64\Oscdimg\etfsboot.com'
+    $efisys = Join-Path $adkRoot 'amd64\Oscdimg\efisys_noprompt.bin'
+    if (-not (Test-Path -LiteralPath $etfsboot)) { $etfsboot = Join-Path (Split-Path -Parent $oscdimg) 'etfsboot.com' }
+    if (-not (Test-Path -LiteralPath $efisys)) { $efisys = Join-Path (Split-Path -Parent $oscdimg) 'efisys_noprompt.bin' }
+    if (-not ((Test-Path -LiteralPath $etfsboot) -and (Test-Path -LiteralPath $efisys))) {
+        Write-Step 'WARN' 'WinPE ISO backend incomplete: missing etfsboot/efisys boot sectors. Staging only.'
     } else {
-        Write-Step 'WARN' 'Echec oscdimg. Staging conserve.'
+        $isoRoot = Join-Path $out 'iso-root'
+        New-Item -ItemType Directory -Path (Join-Path $isoRoot 'sources') -Force | Out-Null
+        Copy-Item -LiteralPath $bootWimPath -Destination (Join-Path $isoRoot 'sources\boot.wim') -Force
+        Copy-Item -LiteralPath $staging -Destination (Join-Path $isoRoot 'RestorPc') -Recurse -Force
+        $bootData = ('2#p0,e,b"{0}"#pEF,e,b"{1}"' -f $etfsboot, $efisys)
+        & $oscdimg ("-bootdata:$bootData") '-u2' '-udfver102' $isoRoot $isoPath
+        if ($LASTEXITCODE -eq 0 -and (Test-Path -LiteralPath $isoPath)) {
+            $isoBuilt = $true
+            Write-Step 'OK' ("ISO bootable creee : " + $isoPath)
+        } else {
+            Write-Step 'WARN' 'Echec oscdimg bootable. Staging conserve.'
+        }
     }
 } else {
     Write-Step 'WARN' 'WinPE ISO backend unavailable'

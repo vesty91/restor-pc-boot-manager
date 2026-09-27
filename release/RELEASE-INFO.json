@@ -1,7 +1,7 @@
 {
   "Version": "1.3.0",
-  "Commit": "pending-release-tag",
-  "GeneratedAt": "2026-09-27T10:32:57.2962207+02:00",
+  "Commit": "9cf7788ca69d3de23a1fb110f45d4f1689fe99bf",
+  "GeneratedAt": "2026-09-27T10:39:33.3749179+02:00",
   "Files": 19,
   "Algorithm": "SHA256",
   "BootMenuEntries": [

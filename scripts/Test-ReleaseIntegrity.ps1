@@ -35,6 +35,10 @@ if (-not (Test-Path -LiteralPath $infoPath -PathType Leaf)) {
 }
 
 $info = Get-Content -LiteralPath $infoPath -Raw -Encoding UTF8 | ConvertFrom-Json
+if ([string]::IsNullOrWhiteSpace([string]$info.Commit) -or [string]$info.Commit -eq 'pending-release-tag') {
+    $failed = $true
+    Write-Step 'ERROR' 'RELEASE-INFO.json.Commit doit identifier un commit source reel.'
+}
 if ([string]$info.Algorithm -ne 'SHA256') {
     $failed = $true
     Write-Step 'ERROR' 'Algorithm inattendu.'

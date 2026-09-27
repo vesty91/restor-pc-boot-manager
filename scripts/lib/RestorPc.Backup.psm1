@@ -292,9 +292,14 @@ function Test-RestorRestoredTarget {
     param(
         [Parameter(Mandatory)][string]$TargetName,
         [Parameter(Mandatory)][string]$DestinationRoot,
-        [Parameter(Mandatory)]$ManifestSnapshot
+        [Parameter(Mandatory)]$ManifestSnapshot,
+        [string]$RelativePrefix = ''
     )
-    $prefix = 'ESP\' + $TargetName + '\'
+    $prefix = if ([string]::IsNullOrWhiteSpace($RelativePrefix)) {
+        'ESP\' + $TargetName + '\'
+    } else {
+        $RelativePrefix.Replace('/', '\').TrimEnd('\') + '\'
+    }
     $missing = New-Object System.Collections.Generic.List[string]
     $mismatches = New-Object System.Collections.Generic.List[string]
     $expectedRelative = New-Object 'System.Collections.Generic.Dictionary[string,string]' ([StringComparer]::OrdinalIgnoreCase)

@@ -41,7 +41,9 @@ $lines = New-Object System.Collections.Generic.List[string]
 $fileCount = 0
 foreach ($relative in ($patterns | Sort-Object)) {
     $full = Join-Path $repoRoot $relative
-    if (-not (Test-Path -LiteralPath $full -PathType Leaf)) { continue }
+    if (-not (Test-Path -LiteralPath $full -PathType Leaf)) {
+        throw ("Fichier critique absent pour le manifeste de release : " + $relative)
+    }
     $hash = (Get-FileHash -LiteralPath $full -Algorithm SHA256).Hash.ToUpperInvariant()
     $normalized = $relative -replace '/', '\'
     $lines.Add(("{0}  {1}" -f $hash, $normalized))
@@ -53,7 +55,10 @@ $integrityPath = Join-Path $releaseDir 'RELEASE-INTEGRITY.txt'
 [IO.File]::WriteAllLines($integrityPath, [string[]]$lines.ToArray(), $utf8)
 
 if ([string]::IsNullOrWhiteSpace($SourceCommit)) {
-    $SourceCommit = 'pending-release-tag'
+    $SourceCommit = (git -C $repoRoot rev-parse HEAD).Trim()
+}
+if ([string]::IsNullOrWhiteSpace($SourceCommit) -or $SourceCommit -eq 'pending-release-tag') {
+    throw 'SourceCommit invalide pour RELEASE-INFO.json.'
 }
 $vesty = (Get-FileHash -LiteralPath (Join-Path $repoRoot 'theme\restor-pc\assets\win_vesty.png') -Algorithm SHA256).Hash.ToUpperInvariant()
 $info = [ordered]@{

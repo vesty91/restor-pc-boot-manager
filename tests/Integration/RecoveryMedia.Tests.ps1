@@ -37,4 +37,9 @@ Describe 'Build-RestorRecoveryMedia staging' {
     It 'refuse un OutputRoot hors du depot' {
         { & $script:Builder -OutputRoot 'C:\Windows\Temp\restor-media-out' } | Should -Throw
     }
+
+    It 'refuse un chemin frere du depot (prefix collision)' {
+        $sibling = $script:RepoRoot.TrimEnd('\') + '-backup'
+        { & $script:Builder -OutputRoot $sibling } | Should -Throw
+    }
 }

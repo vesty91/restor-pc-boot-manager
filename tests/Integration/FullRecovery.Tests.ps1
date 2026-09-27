@@ -35,6 +35,7 @@ Describe 'New-RestorRecoveryDisk offline guards' {
                 Number         = 42
                 IsBoot         = $false
                 IsSystem       = $false
+                Size           = [int64]80GB
                 LargestFreeExtent = [int64]80GB
             }
         }
@@ -62,6 +63,7 @@ Describe 'New-RestorRecoveryDisk offline guards' {
                 Number         = 42
                 IsBoot         = $false
                 IsSystem       = $false
+                Size           = [int64]80GB
                 LargestFreeExtent = [int64]80GB
             }
         }
@@ -220,6 +222,7 @@ Describe 'New-RestorRecoveryDisk offline apply on blank RAW mock' {
                 Number            = 42
                 IsBoot            = $false
                 IsSystem          = $false
+                Size              = [int64]80GB
                 LargestFreeExtent = [int64]10GB
             }
         }
