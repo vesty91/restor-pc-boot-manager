@@ -41,8 +41,8 @@ Release de durcissement et de validation. Le menu rEFInd et l'architecture de bo
 - Dry-run par défaut.
 - `-Apply` seul est insuffisant.
 - La confirmation exacte `RESTOR-PC` est obligatoire pour écrire.
-- Un Golden Backup invalide est refusé.
-- `ManifestSha256` est validé.
+- `Test-RestorGoldenBackup.ps1` refuse un fichier qui ne correspond plus au manifeste.
+- `Restore-RestorBootManager.ps1` valide `ManifestSha256` contre le fichier manifeste et refuse, avec `-Apply`, un statut autre que `VALID`. Il ne rehash pas chaque fichier avant la copie.
 - Le VHDX du laboratoire est associé explicitement, via `Get-DiskImage -ImagePath | Get-Disk` et `Assert-RestorVirtualLabDisk`, avant toute opération destructive du lab.
 - Un disque `IsBoot` ou `IsSystem` est refusé dans le lab.
 - Le modèle physique `SAMSUNG MZVLB256HAHQ-000L2` est bloqué dans le lab.

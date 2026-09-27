@@ -54,7 +54,7 @@ L'écriture réelle exige les deux paramètres. `ConfirmRestore` est comparé av
 
 `-PreRestoreRoot` choisit le dossier parent du pré-backup. Le défaut est `C:\RESTOR-PC-BACKUP`. Un chemin vide, une racine de lecteur, `Windows` ou `System32` sont refusés. Le laboratoire VHD redirige ce paramètre sous `test\vhd\restore-lab`. En production, le défaut n'a pas changé.
 
-Avant d'écrire, le script vérifie l'administrateur, le modèle, le numéro de série, le GPT, le manifeste, le statut `VALID`, puis la taille et le type GPT de la partition existante. Il crée `C:\RESTOR-PC-BACKUP\PRE-RESTORE-YYYYMMDD-HHMMSS\` et abandonne si cette copie échoue. La copie Golden n'est lancée qu'après ce pré-backup.
+Avant d'écrire, le script vérifie l'administrateur, le modèle, le numéro de série, le GPT, le hash du fichier `SHA256-MANIFEST.txt` contre `ManifestSha256`, le statut `VALID`, puis la taille et le type GPT de la partition existante. Il ne recalcule pas le hash de chaque fichier de `ESP\`. Ce contrôle fichier par fichier appartient à `Test-RestorGoldenBackup.ps1`, à lancer avant `-Apply`. Lors de l'écriture, `Restore-RestorBootManager.ps1` crée `C:\RESTOR-PC-BACKUP\PRE-RESTORE-YYYYMMDD-HHMMSS\` et abandonne si cette copie échoue. La copie Golden n'est lancée qu'après ce pré-backup.
 
 Cette version ne fait pas `Clear-Disk`, `Initialize-Disk`, `Remove-Partition`, `Resize-Partition`, `New-Partition`, `Format-Volume`, `diskpart clean`, `bcdboot` ni `bootrec`.
 
@@ -64,10 +64,11 @@ v1.2.0 reste compatible avec un Golden Backup valide créé sous v1.1.0. `$Backu
 
 La restauration accepte ce backup tant que :
 
-- `BACKUP-INFO.json` est valide ;
-- `ManifestSha256` correspond au manifeste ;
-- les fichiers listés correspondent à leurs empreintes ;
+- `BACKUP-INFO.json` a le statut `VALID` ;
+- `ManifestSha256` correspond au fichier `SHA256-MANIFEST.txt` ;
 - la structure requise est présente.
+
+La correspondance de chaque fichier avec son empreinte n'est pas refaite par `Restore-RestorBootManager.ps1`. Elle est le résultat de `Test-RestorGoldenBackup.ps1`.
 
 v1.2.0 ne recrée toujours pas un GPT perdu.
 
