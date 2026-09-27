@@ -180,4 +180,17 @@ Describe 'Test-RestorBackupIntegrity' {
         $result.Valid | Should -BeFalse
         @($result.StructureFailures) | Should -Contain 'RESTOR-TOOLS\RescueGrid\Project\agent\windows\Start-RescueGrid.ps1'
     }
+
+    It 'refuse un refind.conf dont le loader est corrompu' {
+        $root = New-RestorTestGoldenBackup -Root (Join-Path $TestDrive 'bad-refind-loader') -RepoRoot $script:RepoRoot
+        $config = Join-Path $root 'ESP\RESTOR-BOOT\EFI\BOOT\refind.conf'
+        $text = [IO.File]::ReadAllText($config)
+        $text = $text.Replace('\EFI\Microsoft\Boot\bootmgfw.efi', '\EFI\Microsoft\Boot\WRONG.efi')
+        [IO.File]::WriteAllText($config, $text)
+        Update-RestorTestManifest -Root $root -Status 'VALID'
+        $result = Test-RestorBackupIntegrity -BackupPath $root
+        $result.Valid | Should -BeFalse
+        $result.RefindConfigValid | Should -BeFalse
+        ($result.Failures -join "`n") | Should -Match 'loader'
+    }
 }

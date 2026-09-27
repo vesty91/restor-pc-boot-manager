@@ -45,6 +45,81 @@ function Test-RestorBackupMetadataPath {
     return $false
 }
 
+function Get-RestorExpectedRefindEntry {
+    @{
+        'WIN CODE'   = @{ Volume = 'CODE-EFI'; Loader = '\EFI\Microsoft\Boot\bootmgfw.efi' }
+        'WIN VESTY'  = @{ Volume = 'VESTY-EFI'; Loader = '\EFI\Microsoft\Boot\bootmgfw.efi' }
+        'MEMTEST86+' = @{ Volume = $null; Loader = '\EFI\TOOLS\MEMTEST\mt86plus.efi' }
+        'RESCUEGRID' = @{ Volume = 'RESCUE-EFI'; Loader = '\EFI\Microsoft\Boot\bootmgfw.efi' }
+        'LOCKPICK'   = @{ Volume = 'LOCKPICK-EFI'; Loader = '\EFI\BOOT\BOOTX64.EFI' }
+    }
+}
+
+function Test-RestorRefindConfigText {
+    param([Parameter(Mandatory)][string]$ConfigText)
+    $expected = Get-RestorExpectedRefindEntry
+    $entries = @{}
+    $current = $null
+    $scanforManual = $false
+    $problems = New-Object System.Collections.Generic.List[string]
+    foreach ($raw in @(($ConfigText -replace "`r`n", "`n") -split "`n")) {
+        $trim = $raw.Trim()
+        if ($trim.Length -eq 0 -or $trim.StartsWith('#')) { continue }
+        if ($trim -match '^scanfor\s+manual(\s+#.*)?$') {
+            $scanforManual = $true
+            continue
+        }
+        if ($trim -match '^menuentry\s+"([^"]+)"\s*\{') {
+            $name = $Matches[1]
+            if ($entries.ContainsKey($name)) {
+                $problems.Add(("Entrée {0} présente 2 fois." -f $name))
+            }
+            $current = @{ Name = $name; Volume = $null; Loader = $null }
+            $entries[$name] = $current
+            continue
+        }
+        if ($null -eq $current) { continue }
+        if ($trim -match '^volume\s+"([^"]+)"') {
+            $current.Volume = $Matches[1]
+            continue
+        }
+        if ($trim -match '^loader\s+(\S+)') {
+            $current.Loader = $Matches[1]
+            continue
+        }
+        if ($trim -eq '}') { $current = $null }
+    }
+    if (-not $scanforManual) {
+        $problems.Add('scanfor manual absent de refind.conf.')
+    }
+    foreach ($name in @($expected.Keys)) {
+        if (-not $entries.ContainsKey($name)) {
+            $problems.Add(("Entrée {0} présente 0 fois." -f $name))
+            continue
+        }
+        $entry = $entries[$name]
+        $want = $expected[$name]
+        if ($entry.Loader -ne $want.Loader) {
+            $problems.Add(("Entrée {0} : loader [{1}], attendu [{2}]." -f $name, $entry.Loader, $want.Loader))
+        }
+        if ($entry.Volume -ne $want.Volume) {
+            $problems.Add(("Entrée {0} : volume [{1}], attendu [{2}]." -f $name, $entry.Volume, $want.Volume))
+        }
+    }
+    foreach ($name in @($entries.Keys)) {
+        if (-not $expected.ContainsKey($name)) {
+            $problems.Add('Entrée rEFInd inattendue : ' + $name)
+        }
+    }
+    if ($entries.Count -ne $expected.Count) {
+        $problems.Add(("Nombre d entrées rEFInd = {0}, attendu {1}." -f $entries.Count, $expected.Count))
+    }
+    return [pscustomobject]@{
+        Valid    = ($problems.Count -eq 0)
+        Failures = [string[]]$problems.ToArray()
+    }
+}
+
 function Resolve-RestorBackupEntryPath {
     param(
         [Parameter(Mandatory)][string]$BackupRoot,
@@ -233,14 +308,13 @@ function Test-RestorBackupIntegrity {
         $configResolved = Resolve-RestorBackupEntryPath -BackupRoot $root -RelativePath $script:RestorRefindRelativePath
         if ($configResolved.Safe -and (Test-Path -LiteralPath $configResolved.FullPath -PathType Leaf)) {
             $configText = [IO.File]::ReadAllText($configResolved.FullPath)
-            $refindConfigValid = $true
-            foreach ($entryName in @('WIN CODE', 'WIN VESTY', 'MEMTEST86+', 'RESCUEGRID', 'LOCKPICK')) {
-                $count = ([regex]::Matches($configText, [regex]::Escape('menuentry "' + $entryName + '"'))).Count
-                if ($count -ne 1) {
-                    $refindConfigValid = $false
-                    $failures.Add(("Entrée {0} présente {1} fois." -f $entryName, $count))
-                }
+            $refindCheck = Test-RestorRefindConfigText -ConfigText $configText
+            $refindConfigValid = [bool]$refindCheck.Valid
+            foreach ($item in @($refindCheck.Failures)) {
+                $failures.Add([string]$item)
             }
+        } else {
+            $failures.Add('refind.conf absent de la copie RESTOR-BOOT.')
         }
 
         $wimResolved = Resolve-RestorBackupEntryPath -BackupRoot $root -RelativePath $script:RestorBootWimRelativePath
