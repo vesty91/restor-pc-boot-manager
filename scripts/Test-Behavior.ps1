@@ -31,6 +31,7 @@ $configuration = New-PesterConfiguration
 $configuration.Run.Path = Join-Path $repoRoot 'tests'
 $configuration.Run.PassThru = $true
 $configuration.Run.Exit = $false
+$configuration.Filter.ExcludeTag = @('VHD')
 $configuration.Output.Verbosity = 'Detailed'
 $configuration.TestResult.Enabled = $true
 $configuration.TestResult.OutputPath = Join-Path $outputRoot 'TestResults.xml'

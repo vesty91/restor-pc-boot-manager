@@ -18,6 +18,7 @@ param(
     [switch]$AllEfi,
     [switch]$Apply,
     [string]$ConfirmRestore = '',
+    [string]$PreRestoreRoot = 'C:\RESTOR-PC-BACKUP',
     [string]$ExpectedModel = 'SAMSUNG MZVLB256HAHQ-000L2',
     [string]$ExpectedSerial = '0025_3881_91C0_0621'
 )
@@ -153,7 +154,8 @@ try {
             throw ("Partition {0} introuvable. Reconstruction GPT non automatisée : la partition doit déjà exister." -f $target)
         }
     }
-    $preRoot = Join-Path 'C:\RESTOR-PC-BACKUP' ('PRE-RESTORE-' + (Get-Date -Format 'yyyyMMdd-HHmmss'))
+    $preRootParent = Resolve-RestorPreRestoreRoot -Path $PreRestoreRoot
+    $preRoot = Join-Path $preRootParent ('PRE-RESTORE-' + (Get-Date -Format 'yyyyMMdd-HHmmss'))
     New-Item -ItemType Directory -Path $preRoot -Force | Out-Null
     foreach ($target in $targets) {
         $preDest = Join-Path $preRoot $target

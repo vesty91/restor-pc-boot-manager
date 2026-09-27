@@ -118,6 +118,8 @@ Pester, fixtures offline, mocks materiel.
 
 The test suite never accesses physical disks.
 
+Le laboratoire VHDX, lance a part en administrateur, est decrit dans `docs/VIRTUAL-RESTORE-LAB.md`.
+
 ```powershell
 pwsh -NoProfile -File .\scripts\Test-Behavior.ps1
 ```
