@@ -54,7 +54,13 @@ L'écriture réelle exige les deux paramètres. `ConfirmRestore` est comparé av
 
 `-PreRestoreRoot` choisit le dossier parent du pré-backup. Le défaut est `C:\RESTOR-PC-BACKUP`. Un chemin vide, une racine de lecteur, `Windows` ou `System32` sont refusés. Le laboratoire VHD redirige ce paramètre sous `test\vhd\restore-lab`. En production, le défaut n'a pas changé.
 
-Avant d'écrire, le script vérifie l'administrateur, le modèle, le numéro de série, le GPT, le hash du fichier `SHA256-MANIFEST.txt` contre `ManifestSha256`, le statut `VALID`, puis la taille et le type GPT de la partition existante. Il ne recalcule pas le hash de chaque fichier de `ESP\`. Ce contrôle fichier par fichier appartient à `Test-RestorGoldenBackup.ps1`, à lancer avant `-Apply`. Lors de l'écriture, `Restore-RestorBootManager.ps1` crée `C:\RESTOR-PC-BACKUP\PRE-RESTORE-YYYYMMDD-HHMMSS\` et abandonne si cette copie échoue. La copie Golden n'est lancée qu'après ce pré-backup.
+Avant d'écrire, `-Apply` appelle `Test-RestorBackupIntegrity`. Le contrôle est en lecture seule. Il couvre `BACKUP-INFO.json`, `ManifestSha256`, le statut exact `VALID`, le tri du manifeste, les doublons, les chemins dangereux, les fichiers absents, le SHA256 de chaque payload, les fichiers hors manifeste, la structure critique, le hash WIN VESTY, les entrées rEFInd et `boot.wim`. S'il échoue, le script s'arrête avant `Get-Disk`.
+
+Le script vérifie ensuite l'administrateur, le modèle, le numéro de série, le GPT, puis la taille et le type GPT de la partition existante. Il crée `C:\RESTOR-PC-BACKUP\PRE-RESTORE-YYYYMMDD-HHMMSS\` et abandonne si cette copie échoue. Juste après, il relance le même contrôle. Si le backup a changé, aucune copie Golden ne démarre. Le message est `Golden Backup integrity changed before restore copy.`
+
+`Test-RestorGoldenBackup.ps1` utilise le même moteur et peut toujours être lancé seul. Le dry-run ne parcourt pas tous les fichiers.
+
+Ces deux contrôles réduisent la fenêtre pendant laquelle le backup peut changer. Ils ne signent pas le backup et ne protègent pas contre une modification pendant le `robocopy` lui-même.
 
 Cette version ne fait pas `Clear-Disk`, `Initialize-Disk`, `Remove-Partition`, `Resize-Partition`, `New-Partition`, `Format-Volume`, `diskpart clean`, `bcdboot` ni `bootrec`.
 
@@ -68,13 +74,13 @@ La restauration accepte ce backup tant que :
 - `ManifestSha256` correspond au fichier `SHA256-MANIFEST.txt` ;
 - la structure requise est présente.
 
-La correspondance de chaque fichier avec son empreinte n'est pas refaite par `Restore-RestorBootManager.ps1`. Elle est le résultat de `Test-RestorGoldenBackup.ps1`.
+`Restore -Apply` refait cette correspondance fichier par fichier avant d'accéder au disque. La release publiée v1.2.0 ne le faisait pas encore : ce comportement est décrit dans `docs/releases/v1.2.0.md` et reste le snapshot de cette version.
 
 v1.2.0 ne recrée toujours pas un GPT perdu.
 
 ## Tests
 
-La suite offline, lancée par `scripts/Test-Repository.ps1` et `scripts/Test-Behavior.ps1`, vérifie le dry-run, la confirmation et les sauvegardes synthétiques sans disque physique.
+La suite offline, lancée par `scripts/Test-Repository.ps1` et `scripts/Test-Behavior.ps1`, vérifie le dry-run, la confirmation, les sauvegardes synthétiques et les refus d'un `-Apply` dont le backup est corrompu, sans disque physique.
 
 L'écriture réelle de `Restore-RestorBootManager.ps1` est prouvée à part, sur un VHDX isolé, par `scripts/Test-VirtualRestore.ps1`. Ce test n'est pas exécuté par GitHub Actions. Voir `docs/VIRTUAL-RESTORE-LAB.md`.
 

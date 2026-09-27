@@ -4,6 +4,8 @@
 
 .DESCRIPTION
   Sans -Apply et -ConfirmRestore RESTOR-PC, aucune écriture n'est faite.
+  Avec -Apply, l'intégrité complète du Golden Backup est vérifiée avant tout
+  accès disque, puis une seconde fois après PRE-RESTORE et avant la copie.
   Cette version ne recrée, ne formate et ne redimensionne aucune partition.
 #>
 [CmdletBinding()]
@@ -26,6 +28,7 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 Import-Module (Join-Path $PSScriptRoot 'lib\RestorPc.Common.psm1') -Force
+Import-Module (Join-Path $PSScriptRoot 'lib\RestorPc.Backup.psm1') -Force
 
 function Write-Step {
     param([string]$Level, [string]$Message)
@@ -62,18 +65,32 @@ if ($targets.Count -eq 0) {
 }
 
 $root = [IO.Path]::GetFullPath($BackupPath)
-$infoPath = Join-Path $root 'BACKUP-INFO.json'
-$manifestPath = Join-Path $root 'Manifests\SHA256-MANIFEST.txt'
-if (-not (Test-Path -LiteralPath $infoPath) -or -not (Test-Path -LiteralPath $manifestPath)) {
-    throw 'Backup incomplet : BACKUP-INFO.json ou le manifeste est absent.'
-}
-$info = Get-Content -LiteralPath $infoPath -Raw -Encoding UTF8 | ConvertFrom-Json
-$manifestHash = (Get-FileHash -LiteralPath $manifestPath -Algorithm SHA256).Hash.ToUpperInvariant()
-if ([string]$info.ManifestSha256 -ne $manifestHash) { throw 'Le manifeste du backup ne correspond pas à ManifestSha256.' }
-Write-Step 'OK' 'Manifeste du backup cohérent.'
-if ([string]$info.Status -ne 'VALID') {
-    Write-Step 'ERROR' ("Le backup est {0}. -Apply serait refusé." -f $info.Status)
-    if ($writeAllowed) { throw 'Restauration refusée : le backup n''est pas VALID.' }
+if ($writeAllowed) {
+    Write-Step 'INFO' 'Full Golden Backup integrity verification...'
+    $integrity = Test-RestorBackupIntegrity -BackupPath $root
+    if (-not $integrity.Valid) {
+        Write-Step 'ERROR' 'Golden Backup integrity verification failed'
+        foreach ($item in @($integrity.Failures)) { Write-Step 'ERROR' ([string]$item) }
+        $detail = @($integrity.Failures) -join ' '
+        if ([string]$integrity.Status -cne 'VALID') {
+            throw ("Restauration refusée : le backup n'est pas VALID. " + $detail)
+        }
+        throw ("Restauration refusée : Golden Backup integrity verification failed. " + $detail)
+    }
+    Write-Step 'OK' ("Golden Backup integrity verified: {0} files" -f $integrity.FilesVerified)
+} else {
+    $infoPath = Join-Path $root 'BACKUP-INFO.json'
+    $manifestPath = Join-Path $root 'Manifests\SHA256-MANIFEST.txt'
+    if (-not (Test-Path -LiteralPath $infoPath) -or -not (Test-Path -LiteralPath $manifestPath)) {
+        throw 'Backup incomplet : BACKUP-INFO.json ou le manifeste est absent.'
+    }
+    $info = Get-Content -LiteralPath $infoPath -Raw -Encoding UTF8 | ConvertFrom-Json
+    $manifestHash = (Get-FileHash -LiteralPath $manifestPath -Algorithm SHA256).Hash.ToUpperInvariant()
+    if ([string]$info.ManifestSha256 -ne $manifestHash) { throw 'Le manifeste du backup ne correspond pas à ManifestSha256.' }
+    Write-Step 'OK' 'Manifeste du backup cohérent.'
+    if ([string]$info.Status -ne 'VALID') {
+        Write-Step 'ERROR' ("Le backup est {0}. -Apply serait refusé." -f $info.Status)
+    }
 }
 
 $disk = Get-RestorDisk -Model $ExpectedModel -Serial $ExpectedSerial
@@ -93,11 +110,7 @@ if (-not $writeAllowed) {
     Exit-RestorCommand -Code 0
 }
 
-$identity = [Security.Principal.WindowsIdentity]::GetCurrent()
-$principal = New-Object Security.Principal.WindowsPrincipal($identity)
-if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
-    throw 'Restauration refusée : PowerShell n''est pas administrateur.'
-}
+Test-RestorAdministrator
 if ($targets.Count -eq 0) { throw 'Restauration refusée : aucune partition cible.' }
 
 $rules = @{
@@ -164,6 +177,14 @@ try {
         if ($LASTEXITCODE -ge 8) { throw ("Pré-backup échoué pour {0}. Restauration annulée, aucune copie du Golden Backup n'a été écrite." -f $target) }
         Write-Step 'OK' ("Pré-backup {0} : {1}" -f $target, $preDest)
     }
+    Write-Step 'INFO' 'Rechecking Golden Backup integrity before restore copy...'
+    $recheck = Test-RestorBackupIntegrity -BackupPath $root
+    if (-not $recheck.Valid) {
+        Write-Step 'ERROR' 'Golden Backup integrity verification failed'
+        foreach ($item in @($recheck.Failures)) { Write-Step 'ERROR' ([string]$item) }
+        throw 'Golden Backup integrity changed before restore copy.'
+    }
+    Write-Step 'OK' 'Golden Backup integrity unchanged'
     foreach ($target in $targets) {
         & robocopy.exe (Join-Path $root ("ESP\" + $target)) ($chosen[$target].Letter + ':\') '/E' '/COPY:DAT' '/DCOPY:DAT' '/R:2' '/W:1' '/XJ' | Out-Null
         if ($LASTEXITCODE -ge 8) { throw ("Copie de restauration échouée pour {0}. Le pré-backup est dans {1}." -f $target, $preRoot) }

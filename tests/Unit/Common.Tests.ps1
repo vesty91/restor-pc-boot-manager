@@ -115,6 +115,19 @@ Describe 'Resolve-RestorTemporaryLetter' {
     }
 }
 
+Describe 'Test-RestorAdministrator' {
+    It 'suit le niveau reel du processus' {
+        $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
+        $principal = New-Object Security.Principal.WindowsPrincipal($identity)
+        $isAdmin = $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+        if ($isAdmin) {
+            { Test-RestorAdministrator } | Should -Not -Throw
+        } else {
+            { Test-RestorAdministrator } | Should -Throw '*administrateur*'
+        }
+    }
+}
+
 Describe 'Get-RestorManifestLine' {
     It 'produit deux fois les memes lignes dans le meme ordre' {
         $root = Join-Path $TestDrive 'manifest'

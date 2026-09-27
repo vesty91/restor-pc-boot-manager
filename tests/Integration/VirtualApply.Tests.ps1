@@ -227,6 +227,56 @@ Describe 'Production restore apply against the VHDX' -Tag VHD {
     }
 }
 
+Describe 'Corrupted Golden Backup is refused before VHD writes' -Tag VHD {
+    It 'ne copie pas un payload corrompu sur le VHDX' {
+        $inventory = Get-Content -LiteralPath $script:InventoryPath -Raw -Encoding UTF8 | ConvertFrom-Json
+        $global:VhdIntegrityDiskCalls = 0
+        $global:VhdIntegrityPartitionCalls = 0
+        $global:VhdIntegrityCopyCalls = 0
+        Mock Get-Disk { $global:VhdIntegrityDiskCalls++; throw 'Get-Disk should not run after a failed integrity gate' }
+        Mock Get-Partition { $global:VhdIntegrityPartitionCalls++; throw 'Get-Partition should not run' }
+        Mock Get-Volume { throw 'Get-Volume should not run' }
+        Mock Add-PartitionAccessPath { throw 'Add-PartitionAccessPath should not run' }
+        Mock robocopy.exe { $global:VhdIntegrityCopyCalls++; throw 'robocopy should not run' }
+
+        $before = @{}
+        foreach ($item in @($inventory.Partitions)) {
+            $letterRoot = $item.DriveLetter + ':\'
+            $marker = Join-Path $letterRoot 'INTEGRITY-GATE-BEFORE.txt'
+            Set-Content -LiteralPath $marker -Value 'BEFORE GATE' -Encoding ascii
+            $files = @(Get-ChildItem -LiteralPath $letterRoot -Recurse -File -Force)
+            foreach ($file in $files) {
+                $before[$file.FullName] = (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash
+            }
+        }
+
+        $golden = New-RestorTestGoldenBackup -Root (Join-Path $TestDrive 'corrupt-vhd') -RepoRoot $script:RepoRoot
+        $payload = Join-Path $golden 'ESP\CODE-EFI\EFI\Microsoft\Boot\bootmgfw.efi'
+        [IO.File]::WriteAllText($payload, 'CORRUPTED PAYLOAD', (New-Object System.Text.UTF8Encoding $false))
+        $caught = ''
+        try {
+            & $script:RestoreScript -BackupPath $golden -CodeEfi -Apply -ConfirmRestore 'RESTOR-PC' -ExpectedModel 'RESTOR-PC TEST NVME' -ExpectedSerial 'TEST_SERIAL_0001' -PreRestoreRoot (Join-Path $TestDrive 'pre-blocked')
+        } catch {
+            $caught = $_.Exception.Message
+        }
+        $caught | Should -Match 'Fichier modifi|integrity verification failed'
+        $global:VhdIntegrityDiskCalls | Should -Be 0
+        $global:VhdIntegrityPartitionCalls | Should -Be 0
+        $global:VhdIntegrityCopyCalls | Should -Be 0
+
+        $afterCount = 0
+        foreach ($item in @($inventory.Partitions)) {
+            $files = @(Get-ChildItem -LiteralPath ($item.DriveLetter + ':\') -Recurse -File -Force)
+            $afterCount += @($files).Count
+            foreach ($file in $files) {
+                $before.ContainsKey($file.FullName) | Should -BeTrue
+                (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash | Should -Be $before[$file.FullName]
+            }
+        }
+        $afterCount | Should -Be $before.Count
+    }
+}
+
 Describe 'KeepExisting reuses a valid VHDX layout' -Tag VHD {
     It 'ne recree pas les partitions et conserve le marqueur' {
         $inventory = Get-Content -LiteralPath $script:InventoryPath -Raw -Encoding UTF8 | ConvertFrom-Json

@@ -39,6 +39,7 @@ $configuration.TestResult.OutputFormat = 'NUnitXml'
 $configuration.CodeCoverage.Enabled = $true
 $configuration.CodeCoverage.Path = @(
     (Join-Path $repoRoot 'scripts\lib\RestorPc.Common.psm1'),
+    (Join-Path $repoRoot 'scripts\lib\RestorPc.Backup.psm1'),
     (Join-Path $repoRoot 'scripts\Test-RestorGoldenBackup.ps1'),
     (Join-Path $repoRoot 'scripts\Restore-RestorBootManager.ps1')
 )
