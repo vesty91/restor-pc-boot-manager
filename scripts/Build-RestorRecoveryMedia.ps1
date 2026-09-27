@@ -158,6 +158,21 @@ if (-not [string]::IsNullOrWhiteSpace($WinPESource) -and (Test-Path -LiteralPath
     $candidateWim = Join-Path $candidateRoot 'sources\boot.wim'
     $candidateSdi = Join-Path $candidateRoot 'boot\boot.sdi'
     if ((Test-Path -LiteralPath $candidateWim -PathType Leaf) -and (Test-Path -LiteralPath $candidateSdi -PathType Leaf)) {
+        $requiredMedia = @(
+            'boot\bcd',
+            'efi\microsoft\boot\bcd',
+            'efi\boot\bootx64.efi'
+        )
+        $missingMedia = @()
+        foreach ($relative in $requiredMedia) {
+            $mediaPath = Join-Path $candidateRoot $relative
+            if (-not (Test-Path -LiteralPath $mediaPath -PathType Leaf)) {
+                $missingMedia += $relative
+            }
+        }
+        if ($missingMedia.Count -gt 0) {
+            Write-Step 'WARN' ("WinPESource incomplete media tree (missing: " + ($missingMedia -join ', ') + '). Staging conserve.')
+        } else {
         $hasRuntime = $false
         if ($AllowWinPeWithoutPowerShell) {
             $hasRuntime = $true
@@ -195,6 +210,7 @@ if (-not [string]::IsNullOrWhiteSpace($WinPESource) -and (Test-Path -LiteralPath
             $hasWinPe = $true
         } else {
             Write-Step 'WARN' 'WinPESource refuse pour ISO: PowerShell et/ou StorageWMI absents. Staging conserve.'
+        }
         }
     } else {
         Write-Step 'WARN' 'WinPESource incomplete: need sources\boot.wim and boot\boot.sdi for ISO build.'

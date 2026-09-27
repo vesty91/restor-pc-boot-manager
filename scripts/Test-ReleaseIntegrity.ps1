@@ -59,6 +59,27 @@ if ([string]::IsNullOrWhiteSpace($commitId) -or $commitId -eq 'pending-release-t
     } elseif (-not ([string]$resolved).Trim().Equals($commitId, [StringComparison]::OrdinalIgnoreCase)) {
         $failed = $true
         Write-Step 'ERROR' ("RELEASE-INFO.json.Commit ne resout pas au SHA attendu : " + $commitId)
+    } else {
+        foreach ($relative in @(Get-RestorCriticalReleaseRelativePaths)) {
+            $gitPath = ($relative -replace '\\', '/')
+            $blobId = (& git -C $RepoRoot rev-parse --verify ($commitId + ':' + $gitPath) 2>$null)
+            if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace([string]$blobId)) {
+                $failed = $true
+                Write-Step 'ERROR' ("Fichier critique absent du SourceCommit : " + $relative)
+                continue
+            }
+            $fullCanonical = Join-Path $RepoRoot $relative
+            $worktreeId = (& git -C $RepoRoot hash-object -- $fullCanonical 2>$null)
+            if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace([string]$worktreeId)) {
+                $failed = $true
+                Write-Step 'ERROR' ("Impossible de hasher le fichier critique : " + $relative)
+                continue
+            }
+            if (-not ([string]$blobId).Trim().Equals(([string]$worktreeId).Trim(), [StringComparison]::OrdinalIgnoreCase)) {
+                $failed = $true
+                Write-Step 'ERROR' ("Fichier critique divergent du SourceCommit : " + $relative)
+            }
+        }
     }
 }
 if ([string]$info.Algorithm -ne 'SHA256') {
