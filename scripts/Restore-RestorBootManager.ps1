@@ -78,6 +78,7 @@ if ($writeAllowed) {
         throw ("Restauration refusée : Golden Backup integrity verification failed. " + $detail)
     }
     Write-Step 'OK' ("Golden Backup integrity verified: {0} files" -f $integrity.FilesVerified)
+    $integrityManifestHash = [string]$integrity.ManifestSha256Actual
 } else {
     $infoPath = Join-Path $root 'BACKUP-INFO.json'
     $manifestPath = Join-Path $root 'Manifests\SHA256-MANIFEST.txt'
@@ -179,9 +180,13 @@ try {
     }
     Write-Step 'INFO' 'Rechecking Golden Backup integrity before restore copy...'
     $recheck = Test-RestorBackupIntegrity -BackupPath $root
-    if (-not $recheck.Valid) {
+    $sameManifest = ([string]$recheck.ManifestSha256Actual).Equals([string]$integrityManifestHash, [StringComparison]::OrdinalIgnoreCase)
+    if ((-not $recheck.Valid) -or (-not $sameManifest)) {
         Write-Step 'ERROR' 'Golden Backup integrity verification failed'
         foreach ($item in @($recheck.Failures)) { Write-Step 'ERROR' ([string]$item) }
+        if (-not $sameManifest) {
+            Write-Step 'ERROR' 'Le manifeste n''est plus celui vérifié avant l''accès disque.'
+        }
         throw 'Golden Backup integrity changed before restore copy.'
     }
     Write-Step 'OK' 'Golden Backup integrity unchanged'

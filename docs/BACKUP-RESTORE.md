@@ -56,7 +56,7 @@ L'écriture réelle exige les deux paramètres. `ConfirmRestore` est comparé av
 
 Avant d'écrire, `-Apply` appelle `Test-RestorBackupIntegrity`. Le contrôle est en lecture seule. Il couvre `BACKUP-INFO.json`, `ManifestSha256`, le statut exact `VALID`, le tri du manifeste, les doublons, les chemins dangereux, les fichiers absents, le SHA256 de chaque payload, les fichiers hors manifeste, la structure critique, le hash WIN VESTY, les entrées rEFInd et `boot.wim`. S'il échoue, le script s'arrête avant `Get-Disk`.
 
-Le script vérifie ensuite l'administrateur, le modèle, le numéro de série, le GPT, puis la taille et le type GPT de la partition existante. Il crée `C:\RESTOR-PC-BACKUP\PRE-RESTORE-YYYYMMDD-HHMMSS\` et abandonne si cette copie échoue. Juste après, il relance le même contrôle. Si le backup a changé, aucune copie Golden ne démarre. Le message est `Golden Backup integrity changed before restore copy.`
+Le script vérifie ensuite l'administrateur, le modèle, le numéro de série, le GPT, puis la taille et le type GPT de la partition existante. Il crée `C:\RESTOR-PC-BACKUP\PRE-RESTORE-YYYYMMDD-HHMMSS\` et abandonne si cette copie échoue. Juste après, il relance le même contrôle et compare le SHA256 du fichier manifeste à celui capturé par le premier contrôle. Un backup devenu invalide, ou remplacé par un autre ensemble encore cohérent, n'est pas copié. Le message est `Golden Backup integrity changed before restore copy.`
 
 `Test-RestorGoldenBackup.ps1` utilise le même moteur et peut toujours être lancé seul. Le dry-run ne parcourt pas tous les fichiers.
 

@@ -4,7 +4,7 @@
 
 ### Changed
 
-- `Restore -Apply` vérifie chaque payload du Golden Backup avant tout accès disque, puis revérifie l'intégrité immédiatement avant la copie.
+- `Restore -Apply` vérifie chaque payload du Golden Backup avant tout accès disque, puis revérifie l'intégrité et l'empreinte du manifeste immédiatement avant la copie.
 
 ### Safety
 

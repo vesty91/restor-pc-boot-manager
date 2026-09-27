@@ -157,6 +157,31 @@ Describe 'Restore apply integrity gate' {
         $global:GoldenCopies | Should -Be 0
     }
 
+    It 'refuse un backup remplace par un autre ensemble encore coherent' {
+        Enable-RestorIntegrityApply
+        $global:PreCopies = 0
+        $global:GoldenCopies = 0
+        $root = New-RestorTestGoldenBackup -Root (Join-Path $TestDrive 'apply-swapped') -RepoRoot $script:RepoRoot
+        $global:IntegrityRoot = $root
+        Mock robocopy.exe {
+            $destination = [string]$args[1]
+            if ($destination -like '*PRE-RESTORE*') {
+                $global:PreCopies++
+                $payload = Join-Path $global:IntegrityRoot 'ESP\CODE-EFI\EFI\Microsoft\Boot\bootmgfw.efi'
+                [IO.File]::WriteAllText($payload, 'DIFFERENT CONSISTENT BACKUP', (New-Object System.Text.UTF8Encoding $false))
+                Update-RestorTestManifest -Root $global:IntegrityRoot -Status 'VALID'
+                $global:LASTEXITCODE = 0
+                return
+            }
+            $global:GoldenCopies++
+            $global:LASTEXITCODE = 0
+        }
+        $result = Invoke-IntegrityApply -Root $root -CodeEfi
+        $result.Error | Should -Match 'Golden Backup integrity changed before restore copy'
+        $global:PreCopies | Should -Be 1
+        $global:GoldenCopies | Should -Be 0
+    }
+
     It 'ne lance pas le controle complet pendant un dry-run' {
         Mock Get-Disk { New-RestorIntegrityDisk }
         Mock Get-Partition { throw 'REAL HARDWARE ACCESS BLOCKED BY TEST' }
