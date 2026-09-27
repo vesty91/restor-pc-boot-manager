@@ -22,6 +22,8 @@ Le restore de production n'a pas de parametre pour desactiver ses controles. Le 
 
 `-PreRestoreRoot` a pour defaut `C:\RESTOR-PC-BACKUP`. Le laboratoire le redirige sous `test\vhd\restore-lab`. Une racine, un chemin vide, Windows ou System32 sont refuses.
 
+`-KeepExisting` reutilise un VHDX dont les cinq volumes FAT32 sont deja ceux du laboratoire. Il ne cree pas, ne formate pas et n'initialise pas ce disque. Un layout incomplet est refuse. Sans ce commutateur, un VHDX deja present est remplace.
+
 ## Lancement
 
 PowerShell 7, en administrateur. Hyper-V (`New-VHD`) ou `qemu-img.exe` doit deja etre present. Le script n'active aucune fonctionnalite Windows.

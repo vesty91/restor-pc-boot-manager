@@ -64,12 +64,19 @@ $functions = @($labAst.FindAll({
     param($node)
     $node -is [System.Management.Automation.Language.FunctionDefinitionAst]
 }, $true))
-$layout = @($functions | Where-Object { $_.Name -eq 'Invoke-RestorVirtualDiskLayout' })
-if ($layout.Count -ne 1) {
+$layoutFunctions = @($functions | Where-Object {
+    $bodyCommands = @($_.Body.FindAll({
+        param($node)
+        $node -is [System.Management.Automation.Language.CommandAst] -and $destructive -contains $node.GetCommandName()
+    }, $true))
+    $bodyCommands.Count -gt 0
+})
+if ($layoutFunctions.Count -lt 1) {
     $failed = $true
-    Write-Host '[ERROR] Invoke-RestorVirtualDiskLayout est absent.'
-} else {
-    $commands = @($layout[0].Body.FindAll({
+    Write-Host '[ERROR] Aucune fonction de preparation du disque virtuel.'
+}
+foreach ($functionNode in $layoutFunctions) {
+    $commands = @($functionNode.Body.FindAll({
         param($node)
         $node -is [System.Management.Automation.Language.CommandAst]
     }, $true))
@@ -81,7 +88,7 @@ if ($layout.Count -ne 1) {
         })
         if ($earlierAssert.Count -lt 1) {
             $failed = $true
-            Write-Host ("[ERROR] {0} n est pas precede par Assert-RestorVirtualLabDisk." -f $name)
+            Write-Host ("[ERROR] {0} dans {1} n est pas precede par Assert-RestorVirtualLabDisk." -f $name, $functionNode.Name)
         }
     }
 }

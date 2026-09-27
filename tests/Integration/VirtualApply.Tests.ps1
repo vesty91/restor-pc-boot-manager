@@ -5,6 +5,28 @@ BeforeAll {
     $script:RestoreScript = Join-Path $script:RepoRoot 'scripts\Restore-RestorBootManager.ps1'
     Import-Module (Join-Path $script:RepoRoot 'scripts\lib\RestorPc.Common.psm1') -Force
     . (Join-Path $PSScriptRoot '..\Helpers\TestFixture.ps1')
+    function script:Get-RestorLiveLabSnapshot {
+        param([Parameter(Mandatory)][string]$VhdPath)
+        $disk = Get-DiskImage -ImagePath $VhdPath | Get-Disk
+        if ([string]$disk.FriendlyName -eq 'SAMSUNG MZVLB256HAHQ-000L2') { throw 'PHYSICAL RESTOR-PC NVME BLOCKED' }
+        $rows = @()
+        foreach ($partition in @(Get-Partition -DiskNumber $disk.Number | Where-Object { [string]$_.Type -ne 'Reserved' })) {
+            $letter = [string]$partition.DriveLetter
+            $label = ''
+            if ($letter -match '^[A-Za-z]$') {
+                $label = ([string](Get-Volume -DriveLetter $letter).FileSystemLabel).Trim()
+            }
+            $rows += [pscustomobject]@{
+                PartitionNumber = [int]$partition.PartitionNumber
+                Size            = [int64]$partition.Size
+                Label           = $label
+            }
+        }
+        return [pscustomobject]@{
+            DiskNumber = [int]$disk.Number
+            Partitions = @($rows | Sort-Object PartitionNumber)
+        }
+    }
 }
 
 Describe 'PRE-RESTORE failure on the virtual lab' -Tag VHD {
@@ -202,5 +224,56 @@ Describe 'Production restore apply against the VHDX' -Tag VHD {
         }
         $utf8 = New-Object System.Text.UTF8Encoding $false
         [IO.File]::WriteAllText((Join-Path $script:LabRoot 'RESTORE-REPORT.json'), ($report | ConvertTo-Json -Depth 4), $utf8)
+    }
+}
+
+Describe 'KeepExisting reuses a valid VHDX layout' -Tag VHD {
+    It 'ne recree pas les partitions et conserve le marqueur' {
+        $inventory = Get-Content -LiteralPath $script:InventoryPath -Raw -Encoding UTF8 | ConvertFrom-Json
+        $vhd = [string]$inventory.VhdPath
+        $code = @($inventory.Partitions | Where-Object { $_.Name -eq 'CODE-EFI' } | Select-Object -First 1)
+        $marker = Join-Path ($code.DriveLetter + ':\') 'KEEP-EXISTING-MARKER.txt'
+        Set-Content -LiteralPath $marker -Value 'KEEP-EXISTING' -Encoding ascii
+        $before = Get-RestorLiveLabSnapshot -VhdPath $vhd
+        $before.Partitions.Count | Should -Be 5
+        Dismount-DiskImage -ImagePath $vhd | Out-Null
+        & (Join-Path $script:RepoRoot 'scripts\New-RestorVirtualLab.ps1') -LabRoot $script:LabRoot -KeepExisting
+        $after = Get-RestorLiveLabSnapshot -VhdPath $vhd
+        $after.Partitions.Count | Should -Be 5
+        $after.DiskNumber | Should -Not -Be 0
+        for ($index = 0; $index -lt 5; $index++) {
+            $after.Partitions[$index].PartitionNumber | Should -Be $before.Partitions[$index].PartitionNumber
+            $after.Partitions[$index].Size | Should -Be $before.Partitions[$index].Size
+            $after.Partitions[$index].Label | Should -Be $before.Partitions[$index].Label
+        }
+        $refreshed = Get-Content -LiteralPath (Join-Path $script:LabRoot 'lab-inventory.json') -Raw -Encoding UTF8 | ConvertFrom-Json
+        $codeAfter = @($refreshed.Partitions | Where-Object { $_.Name -eq 'CODE-EFI' } | Select-Object -First 1)
+        Get-Content -LiteralPath (Join-Path ($codeAfter.DriveLetter + ':\') 'KEEP-EXISTING-MARKER.txt') -Raw | Should -Match '^KEEP-EXISTING'
+    }
+}
+
+Describe 'KeepExisting rejects an invalid VHDX layout' -Tag VHD {
+    It 'refuse un layout incomplet sans creer ni formater' {
+        $inventory = Get-Content -LiteralPath $script:InventoryPath -Raw -Encoding UTF8 | ConvertFrom-Json
+        $vhd = [string]$inventory.VhdPath
+        $boot = @($inventory.Partitions | Where-Object { $_.Name -eq 'RESTOR-BOOT' } | Select-Object -First 1)
+        $code = @($inventory.Partitions | Where-Object { $_.Name -eq 'CODE-EFI' } | Select-Object -First 1)
+        Set-Volume -DriveLetter $boot.DriveLetter -NewFileSystemLabel 'NOT-A-LAB'
+        $before = Get-RestorLiveLabSnapshot -VhdPath $vhd
+        $caught = ''
+        try {
+            & (Join-Path $script:RepoRoot 'scripts\New-RestorVirtualLab.ps1') -LabRoot $script:LabRoot -KeepExisting
+        } catch {
+            $caught = $_.Exception.Message
+        }
+        $caught | Should -Match 'Existing VHDX layout is invalid; recreate the lab without -KeepExisting.'
+        $after = Get-RestorLiveLabSnapshot -VhdPath $vhd
+        $after.Partitions.Count | Should -Be $before.Partitions.Count
+        for ($index = 0; $index -lt $before.Partitions.Count; $index++) {
+            $after.Partitions[$index].PartitionNumber | Should -Be $before.Partitions[$index].PartitionNumber
+            $after.Partitions[$index].Size | Should -Be $before.Partitions[$index].Size
+        }
+        (Get-Volume -DriveLetter $boot.DriveLetter).FileSystemLabel | Should -Be 'NOT-A-LAB'
+        Get-Content -LiteralPath (Join-Path ($code.DriveLetter + ':\') 'KEEP-EXISTING-MARKER.txt') -Raw | Should -Match '^KEEP-EXISTING'
     }
 }

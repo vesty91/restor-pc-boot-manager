@@ -155,6 +155,103 @@ function Invoke-RestorVirtualDiskLayout {
     return @($created)
 }
 
+function Get-RestorLabSizeTolerance {
+    64MB
+}
+
+function Get-RestorExpectedVirtualSpec {
+    @(
+        @{ Name = 'RESTOR-BOOT'; Label = 'RESTOR-BOOT'; Size = 900MB },
+        @{ Name = 'CODE-EFI'; Label = 'CODE-EFI'; Size = 500MB },
+        @{ Name = 'VESTY-EFI'; Label = 'VESTY-EFI'; Size = 500MB },
+        @{ Name = 'RESCUE-EFI'; Label = 'RESCUE-EFI'; Size = 500MB },
+        @{ Name = 'LOCKPICK-EFI'; Label = 'LOCKPICK-EF'; Size = 900MB }
+    )
+}
+
+function Get-RestorReusableVirtualLayout {
+    param(
+        [Parameter(Mandatory)][string]$VhdPath,
+        [Parameter(Mandatory)][int]$DiskNumber
+    )
+    $disk = Assert-RestorVirtualLabDisk -VhdPath $VhdPath -DiskNumber $DiskNumber
+    if ($disk.IsOffline) {
+        $disk = Assert-RestorVirtualLabDisk -VhdPath $VhdPath -DiskNumber $DiskNumber
+        Set-Disk -Number $DiskNumber -IsOffline $false
+        $disk = Assert-RestorVirtualLabDisk -VhdPath $VhdPath -DiskNumber $DiskNumber
+    }
+    if ($disk.IsReadOnly) {
+        $disk = Assert-RestorVirtualLabDisk -VhdPath $VhdPath -DiskNumber $DiskNumber
+        Set-Disk -Number $DiskNumber -IsReadOnly $false
+        $disk = Assert-RestorVirtualLabDisk -VhdPath $VhdPath -DiskNumber $DiskNumber
+    }
+    $disk = Assert-RestorVirtualLabDisk -VhdPath $VhdPath -DiskNumber $DiskNumber
+    if ([string]$disk.PartitionStyle -ne 'GPT') {
+        return [pscustomobject]@{ State = 'Empty'; Partitions = @() }
+    }
+    $partitions = @(Get-Partition -DiskNumber $DiskNumber | Where-Object { [string]$_.Type -ne 'Reserved' })
+    if ($partitions.Count -eq 0) {
+        return [pscustomobject]@{ State = 'Empty'; Partitions = @() }
+    }
+    $described = @()
+    foreach ($partition in $partitions) {
+        $letter = [string]$partition.DriveLetter
+        if ($letter -notmatch '^[A-Za-z]$') {
+            $disk = Assert-RestorVirtualLabDisk -VhdPath $VhdPath -DiskNumber $DiskNumber
+            Add-PartitionAccessPath -DiskNumber $DiskNumber -PartitionNumber $partition.PartitionNumber -AssignDriveLetter
+            Start-Sleep -Milliseconds 400
+            $partition = Get-Partition -DiskNumber $DiskNumber -PartitionNumber $partition.PartitionNumber
+            $letter = [string]$partition.DriveLetter
+        }
+        if ($letter -notmatch '^[A-Za-z]$') {
+            throw 'Existing VHDX layout is invalid; recreate the lab without -KeepExisting.'
+        }
+        $volume = Get-Volume -DriveLetter $letter
+        $described += [pscustomobject]@{
+            Label           = ([string]$volume.FileSystemLabel).Trim()
+            DriveLetter     = $letter.ToUpperInvariant()
+            PartitionNumber = [int]$partition.PartitionNumber
+            Size            = [int64]$partition.Size
+            GptType         = [string]$partition.GptType
+            FileSystem      = [string]$volume.FileSystem
+            DiskNumber      = $DiskNumber
+        }
+    }
+    $expected = @(Get-RestorExpectedVirtualSpec)
+    if ($described.Count -ne $expected.Count) {
+        throw 'Existing VHDX layout is invalid; recreate the lab without -KeepExisting.'
+    }
+    $inventory = @()
+    $tolerance = Get-RestorLabSizeTolerance
+    foreach ($spec in $expected) {
+        $match = @($described | Where-Object { $_.Label -eq $spec.Label })
+        if ($match.Count -ne 1) {
+            throw 'Existing VHDX layout is invalid; recreate the lab without -KeepExisting.'
+        }
+        $item = $match[0]
+        if (([string]$item.GptType).ToLowerInvariant() -ne $EfiType) {
+            throw 'Existing VHDX layout is invalid; recreate the lab without -KeepExisting.'
+        }
+        if ([string]$item.FileSystem -ne 'FAT32') {
+            throw 'Existing VHDX layout is invalid; recreate the lab without -KeepExisting.'
+        }
+        if ([math]::Abs([int64]$item.Size - [int64]$spec.Size) -gt [int64]$tolerance) {
+            throw 'Existing VHDX layout is invalid; recreate the lab without -KeepExisting.'
+        }
+        $inventory += [pscustomobject]@{
+            Name            = $spec.Name
+            Label           = $item.Label
+            DriveLetter     = $item.DriveLetter
+            PartitionNumber = $item.PartitionNumber
+            Size            = $item.Size
+            GptType         = $item.GptType
+            FileSystem      = $item.FileSystem
+            DiskNumber      = $item.DiskNumber
+        }
+    }
+    return [pscustomobject]@{ State = 'Valid'; Partitions = @($inventory) }
+}
+
 Assert-RestorAdministrator
 $lab = Resolve-RestorLabRoot -Path $LabRoot
 New-Item -ItemType Directory -Path $lab -Force | Out-Null
@@ -181,7 +278,15 @@ if (-not $image -or -not $image.Attached) {
     Mount-DiskImage -ImagePath $vhdPath | Out-Null
 }
 $associated = Get-DiskImage -ImagePath $vhdPath | Get-Disk
-$partitions = @(Invoke-RestorVirtualDiskLayout -VhdPath $vhdPath -DiskNumber ([int]$associated.Number))
+$reusable = Get-RestorReusableVirtualLayout -VhdPath $vhdPath -DiskNumber ([int]$associated.Number)
+if ($reusable.State -eq 'Valid') {
+    Write-LabStep 'OK' 'Existing VHDX layout reused'
+    $partitions = @($reusable.Partitions)
+} elseif ($reusable.State -eq 'Empty') {
+    $partitions = @(Invoke-RestorVirtualDiskLayout -VhdPath $vhdPath -DiskNumber ([int]$associated.Number))
+} else {
+    throw 'Existing VHDX layout is invalid; recreate the lab without -KeepExisting.'
+}
 $inventory = [ordered]@{
     VhdPath    = [IO.Path]::GetFullPath($vhdPath)
     DiskNumber = [int]$associated.Number
