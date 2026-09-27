@@ -331,6 +331,16 @@ if ($integrityCalls.Count -ne 2 -or $diskCalls.Count -ne 1 -or $adminCalls.Count
         $failed = $true
         Write-Host '[ERROR] Le dry-run ne doit pas atteindre le second contrôle d''intégrité.'
     }
+    $snapshotCalls = @(Get-RestorCommandNode -Ast $restoreAst -CommandName 'Get-RestorManifestSnapshot')
+    $postCalls = @(Get-RestorCommandNode -Ast $restoreAst -CommandName 'Test-RestorRestoredTarget')
+    if ($snapshotCalls.Count -lt 1 -or $snapshotCalls[0].Extent.StartOffset -ge $diskCalls[0].Extent.StartOffset) {
+        $failed = $true
+        Write-Host '[ERROR] Le snapshot du manifeste doit précéder Get-RestorDisk.'
+    }
+    if ($postCalls.Count -lt 1 -or $postCalls[0].Extent.StartOffset -le $robocopyCalls[1].Extent.StartOffset) {
+        $failed = $true
+        Write-Host '[ERROR] La vérification post-restore doit suivre la copie Golden.'
+    }
 }
 
 if ($failed) { exit 1 }

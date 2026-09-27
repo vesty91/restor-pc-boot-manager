@@ -209,6 +209,11 @@ Describe 'Production restore apply against the VHDX' -Tag VHD {
         $preLatest = $preDirs | Sort-Object LastWriteTime -Descending | Select-Object -First 1
         Get-Content -LiteralPath (Join-Path $preLatest.FullName 'CODE-EFI\EFI\Microsoft\Boot\bootmgfw.efi') -Raw | Should -Match '^OLD CODE EFI'
         $mismatches.Count | Should -Be 0
+        $restoreResultPath = Join-Path $preLatest.FullName 'RESTORE-RESULT.json'
+        Test-Path -LiteralPath $restoreResultPath | Should -BeTrue
+        $restoreResult = Get-Content -LiteralPath $restoreResultPath -Raw -Encoding UTF8 | ConvertFrom-Json
+        $restoreResult.Status | Should -Be 'VALID'
+        $restoreResult.HashMismatches.Count | Should -Be 0
 
         $report = [ordered]@{
             StartedAt            = $started.ToString('o')

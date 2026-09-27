@@ -265,6 +265,88 @@ function Test-RestorBackupIntegrity {
     }
 }
 
+function Get-RestorManifestSnapshot {
+    param([Parameter(Mandatory)][string]$BackupPath)
+    $root = [IO.Path]::GetFullPath($BackupPath)
+    $manifestPath = Join-Path $root 'Manifests\SHA256-MANIFEST.txt'
+    if (-not (Test-Path -LiteralPath $manifestPath -PathType Leaf)) {
+        throw 'SHA256-MANIFEST.txt absent.'
+    }
+    $entries = New-Object System.Collections.ArrayList
+    $lines = @(Get-Content -LiteralPath $manifestPath -Encoding UTF8 | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+    foreach ($line in $lines) {
+        $manifestMatch = [regex]::Match([string]$line, '^([A-Fa-f0-9]{64})  (.+)$')
+        if (-not $manifestMatch.Success) { throw ('Ligne manifeste illisible : ' + $line) }
+        $relative = $manifestMatch.Groups[2].Value.Replace('/', '\')
+        $resolved = Resolve-RestorBackupEntryPath -BackupRoot $root -RelativePath $relative
+        if (-not $resolved.Safe) { throw ('Chemin manifeste dangereux : ' + $relative) }
+        [void]$entries.Add([pscustomobject]@{
+            RelativePath = $relative
+            Sha256       = $manifestMatch.Groups[1].Value.ToUpperInvariant()
+        })
+    }
+    return @($entries.ToArray())
+}
+
+function Test-RestorRestoredTarget {
+    param(
+        [Parameter(Mandatory)][string]$TargetName,
+        [Parameter(Mandatory)][string]$DestinationRoot,
+        [Parameter(Mandatory)]$ManifestSnapshot
+    )
+    $prefix = 'ESP\' + $TargetName + '\'
+    $missing = New-Object System.Collections.Generic.List[string]
+    $mismatches = New-Object System.Collections.Generic.List[string]
+    $expectedRelative = New-Object 'System.Collections.Generic.Dictionary[string,string]' ([StringComparer]::OrdinalIgnoreCase)
+    $filesExpected = 0
+    $filesVerified = 0
+    foreach ($entry in @($ManifestSnapshot)) {
+        $relative = [string]$entry.RelativePath
+        if (-not $relative.StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase)) { continue }
+        $leaf = $relative.Substring($prefix.Length)
+        $resolved = Resolve-RestorBackupEntryPath -BackupRoot $DestinationRoot -RelativePath $leaf
+        $filesExpected++
+        if (-not $resolved.Safe) {
+            $missing.Add($leaf)
+            continue
+        }
+        $expectedRelative[$leaf] = [string]$entry.Sha256
+        if (-not (Test-Path -LiteralPath $resolved.FullPath -PathType Leaf)) {
+            $missing.Add($leaf)
+            continue
+        }
+        $actual = (Get-FileHash -LiteralPath $resolved.FullPath -Algorithm SHA256).Hash
+        $filesVerified++
+        if (-not $actual.Equals([string]$entry.Sha256, [StringComparison]::OrdinalIgnoreCase)) {
+            $mismatches.Add($leaf)
+        }
+    }
+    $extra = 0
+    if (Test-Path -LiteralPath $DestinationRoot) {
+        $destRoot = (Resolve-Path -LiteralPath $DestinationRoot).ProviderPath
+        $destPrefix = $destRoot.TrimEnd('\') + [IO.Path]::DirectorySeparatorChar
+        $onDisk = @(Get-ChildItem -LiteralPath $DestinationRoot -Recurse -File -Force -ErrorAction SilentlyContinue)
+        foreach ($file in $onDisk) {
+            $full = (Resolve-Path -LiteralPath $file.FullName).ProviderPath
+            if (-not $full.StartsWith($destPrefix, [StringComparison]::OrdinalIgnoreCase)) { continue }
+            $relativeOnDisk = $full.Substring($destPrefix.Length)
+            if (-not $expectedRelative.ContainsKey($relativeOnDisk)) { $extra++ }
+        }
+    }
+    $valid = ($filesExpected -gt 0) -and ($missing.Count -eq 0) -and ($mismatches.Count -eq 0)
+    return [pscustomobject]@{
+        Target              = $TargetName
+        FilesExpected       = $filesExpected
+        FilesVerified       = $filesVerified
+        MissingFiles        = [string[]]$missing.ToArray()
+        HashMismatches      = [string[]]$mismatches.ToArray()
+        ExtraFilesPreserved = $extra
+        Valid               = $valid
+    }
+}
+
 Export-ModuleMember -Function @(
-    'Test-RestorBackupIntegrity'
+    'Test-RestorBackupIntegrity',
+    'Get-RestorManifestSnapshot',
+    'Test-RestorRestoredTarget'
 )
