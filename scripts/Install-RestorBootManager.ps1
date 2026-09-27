@@ -102,7 +102,7 @@ $windowsEsp = Get-Partition |
     Where-Object { $_.IsSystem -and $_.DiskNumber -ne $DiskNumber } |
     Select-Object -First 1
 if (-not $windowsEsp) {
-    throw 'Aucune partition EFI Windows marquée System n’a été trouvée.'
+    throw "Aucune partition EFI Windows marquée System n’a été trouvée."
 }
 
 $windowsEspGuid = ([string]$windowsEsp.Guid).Trim('{}')
@@ -118,7 +118,7 @@ $windowsVolumeGuids = @(
     }
 )
 if ($windowsVolumeGuids.Count -eq 0) {
-    throw 'Aucun GUID de volume Windows n’a été trouvé pour filtrer le menu.'
+    throw "Aucun GUID de volume Windows n’a été trouvé pour filtrer le menu."
 }
 
 $expected = "ERASE DISK $DiskNumber $serial"

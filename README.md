@@ -1,5 +1,7 @@
 # Restor-PC Boot Manager
 
+[![RESTOR-PC CI](https://github.com/vesty91/restor-pc-boot-manager/actions/workflows/ci.yml/badge.svg)](https://github.com/vesty91/restor-pc-boot-manager/actions/workflows/ci.yml)
+
 Latest stable release: v1.1.0
 
 Boot manager UEFI graphique basé sur rEFInd, installé sur un NVMe dédié et conçu pour démarrer directement deux installations Windows indépendantes, avec des outils de diagnostic.
@@ -59,6 +61,7 @@ scripts/
   check-qemu.ps1
   build-test-disk.ps1
   test-boot.ps1
+  Test-Repository.ps1
 ```
 
 ## QEMU testing
@@ -94,6 +97,18 @@ Le binaire rEFInd n'est pas versionné. Placez la publication officielle 0.14.2 
 ```
 
 La dernière commande est un dry-run. Le détail est dans `docs/BACKUP-RESTORE.md`.
+
+## CI / Validation
+
+Validation locale :
+
+```powershell
+pwsh -NoProfile -File .\scripts\Test-Repository.ps1
+```
+
+GitHub Actions : **RESTOR-PC CI** (`.github/workflows/ci.yml`).
+
+La CI ne touche jamais au matériel, ne monte pas de disque physique, ne lance pas QEMU et ne lance pas `Restore -Apply`.
 
 ## Releases
 

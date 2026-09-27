@@ -12,7 +12,7 @@ function Assert-Administrator {
     $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
     $principal = [Security.Principal.WindowsPrincipal]::new($identity)
     if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
-        throw 'Ouvrez PowerShell avec Exécuter en tant qu’administrateur.'
+        throw "Ouvrez PowerShell avec Exécuter en tant qu’administrateur."
     }
 }
 
