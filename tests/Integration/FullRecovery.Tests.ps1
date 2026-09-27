@@ -53,6 +53,44 @@ Describe 'New-RestorRecoveryDisk offline guards' {
         ($result.Output -join "`n") | Should -Match 'simulation|Dry-run'
     }
 
+    It 'refuse un EmptyGpt dont l espace libre est insuffisant' {
+        $root = New-RestorTestGoldenBackup -Root (Join-Path $TestDrive 'tiny-free') -RepoRoot $script:RepoRoot
+        Mock Get-Disk {
+            [pscustomobject]@{
+                FriendlyName      = 'RESTOR-PC TEST NVME'
+                SerialNumber      = 'TEST_SERIAL_0001'
+                PartitionStyle    = 'GPT'
+                Number            = 42
+                IsBoot            = $false
+                IsSystem          = $false
+                Size              = [int64]80GB
+                LargestFreeExtent = [int64]10GB
+            }
+        }
+        Mock Get-Partition {
+            @(
+                [pscustomobject]@{
+                    PartitionNumber = 1
+                    Type            = 'Reserved'
+                    Size            = [int64]16MB
+                    GptType         = '{e3c9e316-0b5c-4db8-817d-f92df00215ae}'
+                    DriveLetter     = ''
+                }
+            )
+        }
+        $result = Invoke-RestorChecked -Path $script:RecoveryScript -Parameter @{
+            DiskNumber      = 42
+            BackupPath      = $root
+            ExpectedModel   = 'RESTOR-PC TEST NVME'
+            ExpectedSerial  = 'TEST_SERIAL_0001'
+            Apply           = $true
+            ConfirmRebuild  = 'REBUILD-RESTOR-PC'
+        }
+        $result.Code | Should -Be 1
+        $result.Error | Should -Match 'Espace libre insuffisant'
+        $global:InitCalls | Should -Be 0
+    }
+
     It 'refuse une confirmation incorrecte sans modifier le disque' {
         $root = New-RestorTestGoldenBackup -Root (Join-Path $TestDrive 'bad-confirm') -RepoRoot $script:RepoRoot
         Mock Get-Disk {

@@ -39,6 +39,104 @@ function Write-Step {
     Write-Host ("[{0}] {1}" -f $Level, $Message)
 }
 
+function Invoke-RestorRecoveryBcd {
+    param([Parameter(Mandatory)][string]$Arguments)
+    Write-Step 'INFO' ("bcdedit " + $Arguments)
+    $output = & cmd.exe /c ("bcdedit " + $Arguments)
+    foreach ($line in @($output)) { if ($line) { Write-Host $line } }
+    if ($LASTEXITCODE -ne 0) {
+        throw ("bcdedit a echoue (code {0}) : {1}" -f $LASTEXITCODE, $Arguments)
+    }
+    return @($output)
+}
+
+function Update-RestorRescueGridBcd {
+    param(
+        [Parameter(Mandatory)][string]$RescueLetter,
+        [Parameter(Mandatory)][string]$ToolsLetter,
+        [Parameter(Mandatory)][string]$BackupRoot
+    )
+    if ($RescueLetter -notmatch '^[A-Za-z]$' -or $ToolsLetter -notmatch '^[A-Za-z]$') {
+        throw 'Lettres Rescue/Tools invalides pour retarget BCD.'
+    }
+    if ($RescueLetter -eq 'C' -or $ToolsLetter -eq 'C') {
+        throw 'Refus retarget BCD sur C:.'
+    }
+
+    $bcdDir = Join-Path ($RescueLetter + ':\') 'EFI\Microsoft\Boot'
+    $store = Join-Path $bcdDir 'BCD'
+    if (-not (Test-Path -LiteralPath $store -PathType Leaf)) {
+        $backupBcd = Join-Path $BackupRoot 'BCD\RESCUE-EFI\BCD'
+        if (Test-Path -LiteralPath $backupBcd -PathType Leaf) {
+            New-Item -ItemType Directory -Path $bcdDir -Force | Out-Null
+            Copy-Item -LiteralPath $backupBcd -Destination $store -Force
+        }
+    }
+
+    $probe = ''
+    $readable = $false
+    if (Test-Path -LiteralPath $store -PathType Leaf) {
+        $probe = & bcdedit.exe /store $store /enum all /v 2>&1 | Out-String
+        $readable = ($LASTEXITCODE -eq 0)
+    }
+
+    if (-not $readable) {
+        Write-Step 'INFO' 'BCD RescueGrid illisible ou absent. Creation d un magasin neuf (createstore)...'
+        New-Item -ItemType Directory -Path $bcdDir -Force | Out-Null
+        Get-ChildItem -LiteralPath $bcdDir -Force -ErrorAction SilentlyContinue |
+            Where-Object { $_.Name -like 'BCD*' } |
+            Remove-Item -Force -ErrorAction SilentlyContinue
+        Invoke-RestorRecoveryBcd ("/createstore `"{0}`"" -f $store)
+        Invoke-RestorRecoveryBcd ("/store `"{0}`" /create {{bootmgr}} /d `"Windows Boot Manager`"" -f $store) | Out-Null
+        Invoke-RestorRecoveryBcd ("/store `"{0}`" /set {{bootmgr}} device boot" -f $store) | Out-Null
+        $probe = & bcdedit.exe /store $store /enum all /v | Out-String
+        if ($LASTEXITCODE -ne 0) {
+            throw 'bcdedit ne peut pas lire le BCD RESCUE-EFI apres createstore.'
+        }
+    }
+
+    if ($probe -notmatch 'ae5534e0-51f0-11dd-93e7-001560b44f3a') {
+        Invoke-RestorRecoveryBcd ("/store `"{0}`" /create {{ramdiskoptions}} /d `"Ramdisk Options`"" -f $store) | Out-Null
+    }
+    Invoke-RestorRecoveryBcd ("/store `"{0}`" /set {{ramdiskoptions}} ramdisksdidevice partition={1}:" -f $store, $ToolsLetter) | Out-Null
+    Invoke-RestorRecoveryBcd ("/store `"{0}`" /set {{ramdiskoptions}} ramdisksdipath \WinPE\RescueGrid\boot.sdi" -f $store) | Out-Null
+
+    $guid = $null
+    $osloaderEnum = & bcdedit.exe /store $store /enum osloader /v | Out-String
+    foreach ($block in ($osloaderEnum -split '(?m)(?=^(?:Identificateur|Identifier)\b)')) {
+        if ($block -match 'RESTOR-PC RESCUEGRID' -and $block -match '(\{[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}\})') {
+            $guid = $Matches[1]
+            break
+        }
+    }
+    if ([string]::IsNullOrWhiteSpace($guid)) {
+        $created = Invoke-RestorRecoveryBcd ("/store `"{0}`" /create /d `"RESTOR-PC RESCUEGRID`" /application osloader" -f $store)
+        $createdText = $created -join "`n"
+        $guidMatch = [regex]::Match($createdText, '\{[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}\}')
+        if (-not $guidMatch.Success) { throw 'GUID RESTOR-PC RESCUEGRID introuvable apres create.' }
+        $guid = $guidMatch.Value
+        Invoke-RestorRecoveryBcd ("/store `"{0}`" /set {1} path \Windows\System32\Boot\winload.efi" -f $store, $guid) | Out-Null
+        Invoke-RestorRecoveryBcd ("/store `"{0}`" /set {1} systemroot \Windows" -f $store, $guid) | Out-Null
+        Invoke-RestorRecoveryBcd ("/store `"{0}`" /set {1} winpe yes" -f $store, $guid) | Out-Null
+        Invoke-RestorRecoveryBcd ("/store `"{0}`" /set {1} detecthal yes" -f $store, $guid) | Out-Null
+        Invoke-RestorRecoveryBcd ("/store `"{0}`" /displayorder {1} /addlast" -f $store, $guid) | Out-Null
+        Invoke-RestorRecoveryBcd ("/store `"{0}`" /default {1}" -f $store, $guid) | Out-Null
+        Invoke-RestorRecoveryBcd ("/store `"{0}`" /timeout 0" -f $store) | Out-Null
+    }
+
+    $wimArg = ("ramdisk=[{0}:]\WinPE\RescueGrid\boot.wim,{{ramdiskoptions}}" -f $ToolsLetter)
+    Invoke-RestorRecoveryBcd ("/store `"{0}`" /set {1} device {2}" -f $store, $guid, $wimArg) | Out-Null
+    Invoke-RestorRecoveryBcd ("/store `"{0}`" /set {1} osdevice {2}" -f $store, $guid, $wimArg) | Out-Null
+
+    $finalBcd = & bcdedit.exe /store $store /enum all /v | Out-String
+    foreach ($token in @('RESTOR-PC RESCUEGRID', '\WinPE\RescueGrid\boot.wim', '\WinPE\RescueGrid\boot.sdi')) {
+        if (-not $finalBcd.Contains($token)) {
+            throw ("BCD RescueGrid incomplet apres retarget, jeton absent : " + $token)
+        }
+    }
+    Write-Step 'OK' ("BCD RescueGrid retargete vers {0}:\WinPE\RescueGrid" -f $ToolsLetter)
+}
+
 function Get-RestorBlankDiskCandidate {
     param(
         [Parameter(Mandatory)][int]$Number,
@@ -255,8 +353,24 @@ $manifestSnapshot = @(Get-RestorManifestSnapshot -BackupPath $root)
 $candidate = Get-RestorBlankDiskCandidate -Number $DiskNumber -Model $ExpectedModel -Serial $ExpectedSerial
 $disk = $candidate.Disk
 $layoutBytes = [int64](16MB + 1GB + 512MB + 512MB + 64GB + 512MB + 1GB + 64MB)
-if ([int64]$disk.Size -lt $layoutBytes) {
-    throw ("Disque trop petit pour le layout RESTOR-PC ({0} octets requis)." -f $layoutBytes)
+# Raw: capacity is disk.Size. EmptyGpt: usable space is LargestFreeExtent after any Reserved/MSR.
+$freeBytes = if ($candidate.State -eq 'EmptyGpt') {
+    [int64]$disk.LargestFreeExtent
+} else {
+    [int64]$disk.Size
+}
+if ($freeBytes -lt $layoutBytes) {
+    throw ("Espace libre insuffisant pour le layout RESTOR-PC ({0} octets libres, {1} requis)." -f $freeBytes, $layoutBytes)
+}
+if ($candidate.State -eq 'EmptyGpt') {
+    $reserved = @(Get-Partition -DiskNumber $DiskNumber -ErrorAction SilentlyContinue | Where-Object {
+        [string]$_.Type -eq 'Reserved' -or ([string]$_.GptType).ToLowerInvariant() -eq $MsrType.ToLowerInvariant()
+    })
+    foreach ($entry in $reserved) {
+        if ([int64]$entry.Size -gt 128MB) {
+            throw ("Partition Reserved trop grande ({0} octets). Reconstruction refusee." -f [int64]$entry.Size)
+        }
+    }
 }
 Write-Step 'OK' ("Disque cible valide, etat {0}, numero {1}." -f $candidate.State, $disk.Number)
 
@@ -410,6 +524,9 @@ try {
         } else {
             Write-Step 'OK' 'RESTOR-TOOLS restaure (layout live mappe).'
         }
+
+        $rescueLetter = [string]$byName['RESCUE-EFI'].DriveLetter
+        Update-RestorRescueGridBcd -RescueLetter $rescueLetter -ToolsLetter $toolsLetter -BackupRoot $root
     }
 
     $diskAfter = Get-Disk -Number $DiskNumber
