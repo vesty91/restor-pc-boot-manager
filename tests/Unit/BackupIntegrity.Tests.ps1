@@ -135,4 +135,13 @@ Describe 'Test-RestorBackupIntegrity' {
         $result.Valid | Should -BeFalse
         @($result.StructureFailures) | Should -Contain 'ESP\CODE-EFI\EFI\Microsoft\Boot\bootmgfw.efi'
     }
+
+    It 'refuse un Golden Backup sans chargeur MemTest86+' {
+        $root = New-RestorTestGoldenBackup -Root (Join-Path $TestDrive 'no-memtest') -RepoRoot $script:RepoRoot
+        $target = Join-Path $root 'ESP\RESTOR-BOOT\EFI\TOOLS\MEMTEST\mt86plus.efi'
+        Remove-Item -LiteralPath $target -Force
+        $result = Test-RestorBackupIntegrity -BackupPath $root
+        $result.Valid | Should -BeFalse
+        @($result.StructureFailures) | Should -Contain 'ESP\RESTOR-BOOT\EFI\TOOLS\MEMTEST\mt86plus.efi'
+    }
 }

@@ -75,6 +75,7 @@ function New-RestorTestGoldenBackup {
     }
     $files = @{
         'ESP\RESTOR-BOOT\EFI\BOOT\BOOTX64.EFI' = 'TEST EFI FILE RESTOR-BOOT'
+        'ESP\RESTOR-BOOT\EFI\TOOLS\MEMTEST\mt86plus.efi' = 'TEST EFI FILE MEMTEST'
         'ESP\CODE-EFI\EFI\Microsoft\Boot\bootmgfw.efi' = 'TEST EFI FILE CODE'
         'ESP\VESTY-EFI\EFI\Microsoft\Boot\bootmgfw.efi' = 'TEST EFI FILE VESTY'
         'ESP\RESCUE-EFI\EFI\Microsoft\Boot\bootmgfw.efi' = 'TEST EFI FILE RESCUE'

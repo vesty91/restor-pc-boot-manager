@@ -15,6 +15,7 @@ function Get-RestorRequiredBackupRelativePath {
     @(
         'ESP\RESTOR-BOOT\EFI\BOOT\refind.conf',
         'ESP\RESTOR-BOOT\EFI\BOOT\BOOTX64.EFI',
+        'ESP\RESTOR-BOOT\EFI\TOOLS\MEMTEST\mt86plus.efi',
         'ESP\CODE-EFI\EFI\Microsoft\Boot\bootmgfw.efi',
         'ESP\VESTY-EFI\EFI\Microsoft\Boot\bootmgfw.efi',
         'ESP\RESCUE-EFI\EFI\Microsoft\Boot\bootmgfw.efi',
