@@ -80,6 +80,9 @@ function New-RestorTestGoldenBackup {
         'ESP\VESTY-EFI\EFI\Microsoft\Boot\bootmgfw.efi' = 'TEST EFI FILE VESTY'
         'ESP\RESCUE-EFI\EFI\Microsoft\Boot\bootmgfw.efi' = 'TEST EFI FILE RESCUE'
         'ESP\LOCKPICK-EFI\EFI\BOOT\BOOTX64.EFI' = 'TEST EFI FILE LOCKPICK'
+        'ESP\LOCKPICK-EFI\EFI\Microsoft\Boot\BCD' = 'TEST LOCKPICK EFI BCD'
+        'ESP\LOCKPICK-EFI\boot\boot.sdi' = 'TEST LOCKPICK BOOT SDI'
+        'ESP\LOCKPICK-EFI\sources\boot.wim' = 'TEST LOCKPICK BOOT WIM'
         'BCD\CODE-EFI\BCD' = 'TEST BCD CODE'
         'BCD\VESTY-EFI\BCD' = 'TEST BCD VESTY'
         'BCD\RESCUE-EFI\BCD' = 'TEST BCD RESCUE'
@@ -89,6 +92,8 @@ function New-RestorTestGoldenBackup {
         'Metadata\GIT-STATE.txt' = 'synthetic'
         'RESTOR-TOOLS\RescueGrid\WinPE\boot.wim' = 'TEST BOOT WIM PLACEHOLDER'
         'RESTOR-TOOLS\RescueGrid\WinPE\boot.sdi' = 'TEST BOOT SDI PLACEHOLDER'
+        'RESTOR-TOOLS\RescueGrid\agent\windows\Setup-WinPEDesktop.ps1' = '# TEST SETUP'
+        'RESTOR-TOOLS\RescueGrid\agent\windows\Start-RescueGrid.ps1' = '# TEST START'
     }
     foreach ($relative in $files.Keys) {
         Write-RestorTextFile -Path (Join-Path $Root $relative) -Content $files[$relative]

@@ -144,4 +144,22 @@ Describe 'Test-RestorBackupIntegrity' {
         $result.Valid | Should -BeFalse
         @($result.StructureFailures) | Should -Contain 'ESP\RESTOR-BOOT\EFI\TOOLS\MEMTEST\mt86plus.efi'
     }
+
+    It 'refuse un Golden Backup sans chaine Lockpick complete' {
+        $root = New-RestorTestGoldenBackup -Root (Join-Path $TestDrive 'no-lockpick-wim') -RepoRoot $script:RepoRoot
+        $target = Join-Path $root 'ESP\LOCKPICK-EFI\sources\boot.wim'
+        Remove-Item -LiteralPath $target -Force
+        $result = Test-RestorBackupIntegrity -BackupPath $root
+        $result.Valid | Should -BeFalse
+        @($result.StructureFailures) | Should -Contain 'ESP\LOCKPICK-EFI\sources\boot.wim'
+    }
+
+    It 'refuse un Golden Backup sans scripts RescueGrid' {
+        $root = New-RestorTestGoldenBackup -Root (Join-Path $TestDrive 'no-rescuegrid-script') -RepoRoot $script:RepoRoot
+        $target = Join-Path $root 'RESTOR-TOOLS\RescueGrid\agent\windows\Start-RescueGrid.ps1'
+        Remove-Item -LiteralPath $target -Force
+        $result = Test-RestorBackupIntegrity -BackupPath $root
+        $result.Valid | Should -BeFalse
+        @($result.StructureFailures) | Should -Contain 'RESTOR-TOOLS\RescueGrid\agent\windows\Start-RescueGrid.ps1'
+    }
 }

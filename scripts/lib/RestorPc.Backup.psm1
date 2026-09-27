@@ -20,13 +20,18 @@ function Get-RestorRequiredBackupRelativePath {
         'ESP\VESTY-EFI\EFI\Microsoft\Boot\bootmgfw.efi',
         'ESP\RESCUE-EFI\EFI\Microsoft\Boot\bootmgfw.efi',
         'ESP\LOCKPICK-EFI\EFI\BOOT\BOOTX64.EFI',
+        'ESP\LOCKPICK-EFI\EFI\Microsoft\Boot\BCD',
+        'ESP\LOCKPICK-EFI\boot\boot.sdi',
+        'ESP\LOCKPICK-EFI\sources\boot.wim',
         'BCD\CODE-EFI\BCD',
         'BCD\VESTY-EFI\BCD',
         'BCD\RESCUE-EFI\BCD',
         'Metadata\NVME-IDENTITY.txt',
         'Metadata\PARTITION-LAYOUT.json',
         'Metadata\REFIND-CONFIG.txt',
-        'Metadata\GIT-STATE.txt'
+        'Metadata\GIT-STATE.txt',
+        'RESTOR-TOOLS\RescueGrid\agent\windows\Setup-WinPEDesktop.ps1',
+        'RESTOR-TOOLS\RescueGrid\agent\windows\Start-RescueGrid.ps1'
     )
 }
 

@@ -159,12 +159,14 @@ function Get-RestorBlankDiskCandidate {
         throw ("Numero de serie inattendu : {0}" -f $serialValue)
     }
     $style = [string]$disk.PartitionStyle
-    $nonReserved = @(Get-Partition -DiskNumber $Number -ErrorAction SilentlyContinue | Where-Object { [string]$_.Type -ne 'Reserved' })
     if ($style -eq 'RAW') {
         return [pscustomobject]@{ Disk = $disk; State = 'Raw' }
     }
-    if ($style -eq 'GPT' -and $nonReserved.Count -eq 0) {
-        return [pscustomobject]@{ Disk = $disk; State = 'EmptyGpt' }
+    if ($style -eq 'GPT') {
+        $nonReserved = @(Get-Partition -DiskNumber $Number -ErrorAction Stop | Where-Object { [string]$_.Type -ne 'Reserved' })
+        if ($nonReserved.Count -eq 0) {
+            return [pscustomobject]@{ Disk = $disk; State = 'EmptyGpt' }
+        }
     }
     throw 'Disque deja partitionne. Reconstruction refusee. Aucune destruction automatique.'
 }

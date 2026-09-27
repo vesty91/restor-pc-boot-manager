@@ -159,6 +159,7 @@ if (-not [string]::IsNullOrWhiteSpace($WinPESource) -and (Test-Path -LiteralPath
     $candidateSdi = Join-Path $candidateRoot 'boot\boot.sdi'
     if ((Test-Path -LiteralPath $candidateWim -PathType Leaf) -and (Test-Path -LiteralPath $candidateSdi -PathType Leaf)) {
         $requiredMedia = @(
+            'bootmgr',
             'boot\bcd',
             'efi\microsoft\boot\bcd',
             'efi\boot\bootx64.efi'

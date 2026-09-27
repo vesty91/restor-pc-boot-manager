@@ -91,6 +91,34 @@ Describe 'New-RestorRecoveryDisk offline guards' {
         $global:InitCalls | Should -Be 0
     }
 
+    It 'echoue ferme si Get-Partition leve une erreur sur GPT' {
+        $root = New-RestorTestGoldenBackup -Root (Join-Path $TestDrive 'partition-enum-fail') -RepoRoot $script:RepoRoot
+        Mock Get-Disk {
+            [pscustomobject]@{
+                FriendlyName      = 'RESTOR-PC TEST NVME'
+                SerialNumber      = 'TEST_SERIAL_0001'
+                PartitionStyle    = 'GPT'
+                Number            = 42
+                IsBoot            = $false
+                IsSystem          = $false
+                Size              = [int64]80GB
+                LargestFreeExtent = [int64]80GB
+            }
+        }
+        Mock Get-Partition { throw 'PROVIDER I/O FAILURE' }
+        $result = Invoke-RestorChecked -Path $script:RecoveryScript -Parameter @{
+            DiskNumber      = 42
+            BackupPath      = $root
+            ExpectedModel   = 'RESTOR-PC TEST NVME'
+            ExpectedSerial  = 'TEST_SERIAL_0001'
+            Apply           = $true
+            ConfirmRebuild  = 'REBUILD-RESTOR-PC'
+        }
+        $result.Code | Should -Be 1
+        $global:InitCalls | Should -Be 0
+        ($result.Error + ($result.Output -join "`n")) | Should -Match 'PROVIDER I/O FAILURE'
+    }
+
     It 'refuse une confirmation incorrecte sans modifier le disque' {
         $root = New-RestorTestGoldenBackup -Root (Join-Path $TestDrive 'bad-confirm') -RepoRoot $script:RepoRoot
         Mock Get-Disk {
