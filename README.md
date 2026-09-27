@@ -1,5 +1,7 @@
 # Restor-PC Boot Manager
 
+Latest stable release: v1.1.0
+
 Boot manager UEFI graphique basé sur rEFInd, installé sur un NVMe dédié et conçu pour démarrer directement deux installations Windows indépendantes, avec des outils de diagnostic.
 
 ## État actuel validé
@@ -18,6 +20,8 @@ NVMe RESTOR-PC
    +-- LOCKPICK-EFI  EFI 1 Gio      -> média Lockpick complet
    +-- espace libre                 -> Linux plus tard
 ```
+
+## Boot menu
 
 Le menu rEFInd affiche : **WIN CODE**, **WIN VESTY**, **MEMTEST86+**, **RESCUEGRID** et **LOCKPICK**.
 
@@ -57,9 +61,15 @@ scripts/
   test-boot.ps1
 ```
 
-### Banc QEMU
+## QEMU testing
 
-`Ctrl+Shift+B` lance `scripts/test-boot.ps1`. Les images restent dans `test\` et ne touchent aucun disque physique.
+`Ctrl+Shift+B` lance `RESTOR-PC: Test Bootloader`. TCG est le mode stable. `-Accel whpx` et `-Accel auto` restent optionnels. Les images restent sous `test\` et le script refuse `PhysicalDrive`.
+
+```powershell
+.\scripts\check-qemu.ps1
+.\scripts\build-test-disk.ps1
+.\scripts\test-boot.ps1
+```
 
 Le binaire rEFInd n'est pas versionné. Placez la publication officielle 0.14.2 comme décrit dans `bootloader/README.md`.
 
@@ -84,6 +94,12 @@ Le binaire rEFInd n'est pas versionné. Placez la publication officielle 0.14.2 
 ```
 
 La dernière commande est un dry-run. Le détail est dans `docs/BACKUP-RESTORE.md`.
+
+## Releases
+
+- [v1.1.0](docs/releases/v1.1.0.md)
+- [Backup et restauration](docs/BACKUP-RESTORE.md)
+- [Lockpick](Lockpick/README.md) : `Lockpick.iso` n'est pas distribué par ce dépôt.
 
 ## Sécurité
 

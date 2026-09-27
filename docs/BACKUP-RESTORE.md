@@ -16,6 +16,8 @@ Le script monte en lecture les volumes qui n'ont pas de lettre, avec R, S, T, W,
 
 La copie utilise `robocopy /E /COPY:DAT /DCOPY:DAT /R:2 /W:1 /XJ`. Les codes 0 à 7 sont un succès. Un code supérieur ou égal à 8 est une erreur.
 
+`bcdedit /store` sur un BCD encore monté peut changer sa date de dernière écriture, même lors d'une lecture. La sauvegarde copie d'abord le fichier, puis lance `bcdedit` uniquement sur cette copie. Ce n'est pas une corruption du contenu : lors de l'incident observé, la taille du BCD CODE-EFI est restée 28 672 octets et seul le timestamp a changé.
+
 `RESTOR-TOOLS` n'est pas copié en entier. La sauvegarde prend `WinPE\RescueGrid`, le dossier projet `RescueGrid`, et les lanceurs trouvés à la racine. L'inventaire réel est écrit dans `RESTOR-TOOLS\INVENTORY.txt`.
 
 `Status` dans `BACKUP-INFO.json` vaut `VALID` seulement si l'identité NVMe, les cinq ESP, les cinq entrées rEFInd, le hash WIN VESTY et un arbre Git propre sont confirmés. Sinon le statut est `WARNING` ou `FAILED`.
