@@ -1,5 +1,17 @@
 # Changelog
 
+## [Unreleased]
+
+### Changed
+
+- `Restore -Apply` vérifie chaque payload du Golden Backup avant tout accès disque, puis revérifie l'intégrité et l'empreinte du manifeste immédiatement avant la copie.
+
+### Safety
+
+- Un payload corrompu, absent, inattendu ou un chemin de manifeste dangereux bloque `-Apply`.
+- Il n'existe pas de paramètre pour ignorer ce contrôle.
+- Les deux vérifications réduisent la fenêtre entre la lecture du backup et la copie. Elles ne constituent pas une authentification cryptographique, ni une garantie pendant l'exécution de `robocopy`.
+
 ## [1.2.0] - 2026-09-27
 
 Release de durcissement et de validation. Le menu rEFInd et l'architecture de boot validés en v1.1.0 ne changent pas. Le format interne du Golden Backup reste `1.1.0` : `$BackupVersion` dans `Backup-RestorBootManager.ps1` n'est pas modifié, et aucun nouveau Golden Backup réel n'est produit.

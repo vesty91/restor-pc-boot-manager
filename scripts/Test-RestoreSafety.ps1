@@ -203,6 +203,136 @@ if ($null -ne $dryRunExit) {
     }
 }
 
+function Get-RestorCommandNode {
+    param($Ast, [string]$CommandName)
+    $commands = @($Ast.FindAll({
+        param($node)
+        $node -is [System.Management.Automation.Language.CommandAst]
+    }, $true))
+    $matched = New-Object System.Collections.Generic.List[object]
+    foreach ($command in $commands) {
+        if ($command.GetCommandName() -eq $CommandName) { $matched.Add($command) }
+    }
+    return @($matched | Sort-Object { $_.Extent.StartOffset })
+}
+
+function Get-RestorAstParameterName {
+    param($Ast)
+    $names = New-Object System.Collections.Generic.List[string]
+    $blocks = @()
+    if ($Ast.ParamBlock) { $blocks += $Ast.ParamBlock }
+    foreach ($functionNode in @($Ast.FindAll({
+        param($node)
+        $node -is [System.Management.Automation.Language.FunctionDefinitionAst]
+    }, $true))) {
+        if ($functionNode.Body.ParamBlock) { $blocks += $functionNode.Body.ParamBlock }
+    }
+    foreach ($block in $blocks) {
+        foreach ($parameter in @($block.Parameters)) {
+            $names.Add([string]$parameter.Name.VariablePath.UserPath)
+        }
+    }
+    return @($names)
+}
+
+function Test-RestorIntegrityCallInWriteGate {
+    param($CommandNode)
+    $parent = $CommandNode.Parent
+    while ($null -ne $parent -and $parent -isnot [System.Management.Automation.Language.IfStatementAst]) {
+        $parent = $parent.Parent
+    }
+    if ($null -eq $parent) { return $false }
+    foreach ($clause in @($parent.Clauses)) {
+        $ownsCommand = $CommandNode.Extent.StartOffset -ge $clause.Item2.Extent.StartOffset -and $CommandNode.Extent.EndOffset -le $clause.Item2.Extent.EndOffset
+        if (-not $ownsCommand) { continue }
+        $condition = Get-InnerExpression -Expression $clause.Item1
+        if ($condition -is [System.Management.Automation.Language.VariableExpressionAst] -and $condition.VariablePath.UserPath -eq 'writeAllowed') {
+            return $true
+        }
+    }
+    return $false
+}
+
+$forbiddenParameter = @(
+    'SkipIntegrityCheck',
+    'SkipIntegrity',
+    'IgnoreManifest',
+    'SkipHash',
+    'ForceBackup',
+    'TrustBackup',
+    'NoVerify',
+    'TestMode'
+)
+$backupModulePath = Join-Path $repoRoot 'scripts\lib\RestorPc.Backup.psm1'
+if (-not (Test-Path -LiteralPath $backupModulePath -PathType Leaf)) {
+    $failed = $true
+    Write-Host '[ERROR] RestorPc.Backup.psm1 est absent.'
+} else {
+    $backupAst = Get-ScriptAst -Path $backupModulePath
+    foreach ($name in @($forbiddenParameter)) {
+        if (@(Get-RestorAstParameterName -Ast $backupAst) -contains $name) {
+            $failed = $true
+            Write-Host ("[ERROR] Paramètre de contournement interdit : {0}" -f $name)
+        }
+    }
+    foreach ($blockedName in @('Get-Disk', 'robocopy', 'robocopy.exe', 'Exit-RestorCommand')) {
+        if (@(Get-RestorCommandNode -Ast $backupAst -CommandName $blockedName).Count -gt 0) {
+            $failed = $true
+            Write-Host ("[ERROR] Le moteur d'intégrité appelle {0}." -f $blockedName)
+        }
+    }
+    $moduleExit = @($backupAst.FindAll({
+        param($node)
+        $node -is [System.Management.Automation.Language.ExitStatementAst]
+    }, $true))
+    if ($moduleExit.Count -gt 0) {
+        $failed = $true
+        Write-Host '[ERROR] Le moteur d''intégrité ne doit pas appeler exit.'
+    }
+}
+
+foreach ($name in @($forbiddenParameter)) {
+    if (@(Get-RestorAstParameterName -Ast $restoreAst) -contains $name) {
+        $failed = $true
+        Write-Host ("[ERROR] Restore expose un contournement : {0}" -f $name)
+    }
+}
+
+$integrityCalls = @(Get-RestorCommandNode -Ast $restoreAst -CommandName 'Test-RestorBackupIntegrity')
+$diskCalls = @(Get-RestorCommandNode -Ast $restoreAst -CommandName 'Get-RestorDisk')
+$adminCalls = @(Get-RestorCommandNode -Ast $restoreAst -CommandName 'Test-RestorAdministrator')
+$partitionCalls = @(Get-RestorCommandNode -Ast $restoreAst -CommandName 'Get-Partition')
+$robocopyCalls = @(Get-RestorCommandNode -Ast $restoreAst -CommandName 'robocopy.exe')
+if ($integrityCalls.Count -ne 2 -or $diskCalls.Count -ne 1 -or $adminCalls.Count -ne 1 -or $partitionCalls.Count -lt 1 -or $robocopyCalls.Count -ne 2) {
+    $failed = $true
+    Write-Host '[ERROR] Restore doit avoir deux gates d''intégrité, avant le disque puis entre les deux robocopy.'
+} else {
+    if (-not (Test-RestorIntegrityCallInWriteGate -CommandNode $integrityCalls[0])) {
+        $failed = $true
+        Write-Host '[ERROR] Le premier contrôle d''intégrité doit être réservé à writeAllowed.'
+    }
+    if ($integrityCalls[0].Extent.StartOffset -ge $diskCalls[0].Extent.StartOffset) {
+        $failed = $true
+        Write-Host '[ERROR] Le premier contrôle d''intégrité doit précéder Get-RestorDisk.'
+    }
+    if ($integrityCalls[0].Extent.StartOffset -ge $partitionCalls[0].Extent.StartOffset -or $integrityCalls[0].Extent.StartOffset -ge $robocopyCalls[0].Extent.StartOffset) {
+        $failed = $true
+        Write-Host '[ERROR] Le premier contrôle d''intégrité doit précéder les opérations de partition et de copie.'
+    }
+    if ($adminCalls[0].Extent.StartOffset -le $diskCalls[0].Extent.StartOffset) {
+        $failed = $true
+        Write-Host '[ERROR] Le contrôle administrateur doit suivre l''identification du disque sur le chemin d''écriture.'
+    }
+    if ($integrityCalls[1].Extent.StartOffset -le $robocopyCalls[0].Extent.StartOffset -or $integrityCalls[1].Extent.StartOffset -ge $robocopyCalls[1].Extent.StartOffset) {
+        $failed = $true
+        Write-Host '[ERROR] Le second contrôle d''intégrité doit se placer après PRE-RESTORE et avant la copie Golden.'
+    }
+    if ($null -ne $dryRunExit -and $integrityCalls[1].Extent.StartOffset -le $dryRunExit.Extent.EndOffset) {
+        $failed = $true
+        Write-Host '[ERROR] Le dry-run ne doit pas atteindre le second contrôle d''intégrité.'
+    }
+}
+
 if ($failed) { exit 1 }
 Write-Host '[OK] restore safety valid'
 exit 0

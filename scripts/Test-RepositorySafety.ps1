@@ -32,6 +32,46 @@ foreach ($relative in $tracked) {
     }
 }
 
+$restorePath = Join-Path $repoRoot 'scripts\Restore-RestorBootManager.ps1'
+$tokens = $null
+$parseErrors = $null
+$restoreAst = [System.Management.Automation.Language.Parser]::ParseFile($restorePath, [ref]$tokens, [ref]$parseErrors)
+if ($parseErrors -and @($parseErrors).Count -gt 0) {
+    Write-Host '[ERROR] Syntaxe Restore invalide.'
+    exit 1
+}
+$forbiddenParameter = @(
+    'SkipIntegrityCheck',
+    'SkipIntegrity',
+    'IgnoreManifest',
+    'SkipHash',
+    'ForceBackup',
+    'TrustBackup',
+    'NoVerify',
+    'TestMode'
+)
+$parameterNames = New-Object System.Collections.Generic.List[string]
+$blocks = @()
+if ($restoreAst.ParamBlock) { $blocks += $restoreAst.ParamBlock }
+foreach ($functionNode in @($restoreAst.FindAll({
+    param($node)
+    $node -is [System.Management.Automation.Language.FunctionDefinitionAst]
+}, $true))) {
+    if ($functionNode.Body.ParamBlock) { $blocks += $functionNode.Body.ParamBlock }
+}
+foreach ($block in $blocks) {
+    foreach ($parameter in @($block.Parameters)) {
+        if ($null -eq $parameter) { continue }
+        $parameterNames.Add([string]$parameter.Name.VariablePath.UserPath)
+    }
+}
+foreach ($name in $forbiddenParameter) {
+    if ($parameterNames -contains $name) {
+        $failed = $true
+        Write-Host ("[ERROR] Restore expose un contournement : {0}" -f $name)
+    }
+}
+
 if ($failed) { exit 1 }
 Write-Host '[OK] repository safety valid'
 exit 0

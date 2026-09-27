@@ -101,7 +101,9 @@ Le binaire rEFInd n'est pas versionné. Placez la publication officielle 0.14.2 
 .\scripts\Restore-RestorBootManager.ps1 -BackupPath "C:\RESTOR-PC-BACKUP\v1.1.0-GOLDEN-..." -RestorBoot
 ```
 
-La dernière commande est un dry-run. `-PreRestoreRoot` existe, mais son défaut reste `C:\RESTOR-PC-BACKUP`. Le dossier de sauvegarde réel reste celui du Golden Backup v1.1.0 : le format interne n'a pas changé en v1.2.0. Ne pas lancer `-Apply` sur le NVMe pour valider cette release. La preuve d'écriture a été faite sur un VHDX isolé. Le détail est dans `docs/BACKUP-RESTORE.md`.
+La dernière commande est un dry-run. Elle ne hash pas les centaines de fichiers du backup. `-PreRestoreRoot` existe, mais son défaut reste `C:\RESTOR-PC-BACKUP`. Le format interne du Golden Backup reste celui de v1.1.0.
+
+Avec `-Apply` et `-ConfirmRestore "RESTOR-PC"`, `Restore-RestorBootManager.ps1` exécute lui-même le contrôle d'intégrité complet : avant `Get-Disk`, puis une seconde fois après le PRE-RESTORE et avant la copie Golden. `Test-RestorGoldenBackup.ps1` reste une vérification indépendante. Ce contrôle valide l'intégrité du manifeste. Il n'authentifie pas l'auteur du backup et ne rend pas la copie `robocopy` atomique. Ne pas lancer `-Apply` sur le NVMe pour valider le dépôt. Le détail est dans `docs/BACKUP-RESTORE.md`.
 
 > [!CAUTION]
 > La commande suivante écrit réellement sur la partition cible. Elle n'est pas une étape de validation de la release.

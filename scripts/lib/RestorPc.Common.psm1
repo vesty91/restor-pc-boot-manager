@@ -112,6 +112,14 @@ function Resolve-RestorPreRestoreRoot {
     return $full
 }
 
+function Test-RestorAdministrator {
+    $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
+    $principal = New-Object Security.Principal.WindowsPrincipal($identity)
+    if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+        throw 'Restauration refusée : PowerShell n''est pas administrateur.'
+    }
+}
+
 function Exit-RestorCommand {
     param([int]$Code = 0)
     if ($env:RESTOR_PC_INLINE_TEST -eq '1') {
@@ -128,5 +136,6 @@ Export-ModuleMember -Function @(
     'Resolve-RestorTemporaryLetter',
     'Get-RestorManifestLine',
     'Resolve-RestorPreRestoreRoot',
+    'Test-RestorAdministrator',
     'Exit-RestorCommand'
 )
