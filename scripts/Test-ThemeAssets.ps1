@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
   Vérifie le thème RESTOR-PC et l'en-tête PNG des icônes, sans ImageMagick.
 #>

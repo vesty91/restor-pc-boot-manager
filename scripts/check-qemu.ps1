@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
   Détecte QEMU et le firmware OVMF sans rien installer.
 #>

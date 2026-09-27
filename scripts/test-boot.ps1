@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
   Lance le menu rEFInd v1.0.0 dans QEMU, uniquement avec des images sous test\.
 

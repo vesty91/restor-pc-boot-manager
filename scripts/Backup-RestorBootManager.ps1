@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
   Sauvegarde en lecture le boot manager RESTOR-PC vers un Golden Backup.
 
@@ -60,17 +60,17 @@ function ConvertTo-NormalizedSerial {
 
 function Get-RestorDisk {
     $expectedSerialNorm = ConvertTo-NormalizedSerial $ExpectedSerial
-    $matches = @()
+    $matchedDisks = @()
     foreach ($candidate in @(Get-Disk)) {
         $serial = ConvertTo-NormalizedSerial ([string]$candidate.SerialNumber)
         $model = ([string]$candidate.FriendlyName).Trim()
         if ($model -eq $ExpectedModel.Trim() -and $serial -eq $expectedSerialNorm) {
-            $matches += $candidate
+            $matchedDisks += $candidate
         }
     }
-    if ($matches.Count -eq 0) { throw 'Aucun disque ne correspond au modèle et au numéro de série RESTOR-PC.' }
-    if ($matches.Count -gt 1) { throw 'Plusieurs disques correspondent au modèle et au numéro de série RESTOR-PC.' }
-    $disk = $matches[0]
+    if ($matchedDisks.Count -eq 0) { throw 'Aucun disque ne correspond au modèle et au numéro de série RESTOR-PC.' }
+    if ($matchedDisks.Count -gt 1) { throw 'Plusieurs disques correspondent au modèle et au numéro de série RESTOR-PC.' }
+    $disk = $matchedDisks[0]
     if ([string]$disk.PartitionStyle -ne 'GPT') { throw 'Le disque identifié n''est pas GPT.' }
     if ([string]$disk.BusType -ne 'NVMe') { throw 'Le disque identifié n''est pas NVMe.' }
     return $disk
@@ -495,6 +495,9 @@ Sans -Apply et -ConfirmRestore RESTOR-PC, le script reste en simulation.
         exit 1
     } finally {
         if ($null -ne $script:DiskNumber) { Remove-AddedMounts }
-        try { Stop-Transcript | Out-Null } catch { }
+        try { Stop-Transcript | Out-Null } catch {
+            # Best-effort : aucun transcript actif, ou transcript déjà arrêté. Ne bloque pas le bilan du backup.
+            Write-Verbose ("Stop-Transcript ignoré : " + $_.Exception.Message)
+        }
     }
 }

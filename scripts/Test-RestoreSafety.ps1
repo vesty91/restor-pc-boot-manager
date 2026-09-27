@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
   Contrôle statique du dry-run et des commandes de partitionnement.
   N'exécute ni Backup, ni Restore, ni Get-Disk.

@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
   Lance toute la validation statique du dépôt. Aucun disque, aucun QEMU, aucun Restore -Apply.
 #>
@@ -74,6 +74,12 @@ if (Test-Path -LiteralPath $workflowPath -PathType Leaf) {
         'name: RESTOR-PC CI',
         'windows-latest',
         'workflow_dispatch',
+        'permissions:',
+        'contents: read',
+        'concurrency:',
+        'cancel-in-progress: true',
+        'timeout-minutes: 15',
+        'actions/checkout@v7',
         'pwsh -NoProfile -File .\scripts\Test-Repository.ps1'
     )
     foreach ($needle in $workflowNeedles) {
@@ -84,21 +90,49 @@ if (Test-Path -LiteralPath $workflowPath -PathType Leaf) {
     }
 }
 
-$analyzer = Get-Module -ListAvailable -Name PSScriptAnalyzer
-if (-not $analyzer) {
-    Write-Host '[WARN] PSScriptAnalyzer absent. Les règles de sévérité Error ne sont pas évaluées.'
+$analyzer = @(Get-Module -ListAvailable -Name PSScriptAnalyzer | Sort-Object Version -Descending)
+if ($analyzer.Count -eq 0) {
+    $failed = $true
+    Write-Host '[ERROR] PSScriptAnalyzer absent. Les portes de qualité ne peuvent pas être évaluées.'
+    Write-Host '[ERROR] PSScriptAnalyzer critical rules'
 } else {
+    Write-Host ("PSScriptAnalyzer version : {0}" -f $analyzer[0].Version)
     Import-Module PSScriptAnalyzer
-    $results = @(Invoke-ScriptAnalyzer -Path (Join-Path $repoRoot 'scripts') -Recurse -Severity @('Error', 'Warning'))
-    foreach ($result in $results) {
-        if ([string]$result.Severity -eq 'Warning') {
-            Write-Host ("[WARN] {0}:{1} {2} {3}" -f $result.ScriptName, $result.Line, $result.RuleName, $result.Message)
+    $settingsPath = Join-Path $repoRoot 'config\PSScriptAnalyzerSettings.psd1'
+    $results = @(Invoke-ScriptAnalyzer -Path (Join-Path $repoRoot 'scripts') -Recurse -Settings $settingsPath -Severity @('Error', 'Warning'))
+    $analyzerErrors = @($results | Where-Object { [string]$_.Severity -eq 'Error' })
+    $warnings = @($results | Where-Object { [string]$_.Severity -eq 'Warning' })
+    Write-Host 'PSScriptAnalyzer:'
+    Write-Host ("Errors   : {0}" -f $analyzerErrors.Count)
+    Write-Host ("Warnings : {0}" -f $warnings.Count)
+    $warnings | Group-Object RuleName | Sort-Object Count -Descending | ForEach-Object {
+        Write-Host ("  {0} {1}" -f $_.Count, $_.Name)
+    }
+    $analyzerFailed = $false
+    foreach ($result in $analyzerErrors) {
+        $failed = $true
+        $analyzerFailed = $true
+        Write-Host ("[ERROR] {0}:{1} {2} {3}" -f $result.ScriptName, $result.Line, $result.RuleName, $result.Message)
+    }
+    $criticalRules = @(
+        'PSAvoidUsingEmptyCatchBlock',
+        'PSAvoidAssignmentToAutomaticVariable',
+        'PSReviewUnusedParameter'
+    )
+    foreach ($ruleName in $criticalRules) {
+        $hits = @($results | Where-Object { $_.RuleName -eq $ruleName })
+        if ($hits.Count -gt 0) {
+            $failed = $true
+            $analyzerFailed = $true
+            foreach ($hit in $hits) {
+                Write-Host ("[ERROR] {0}:{1} {2}" -f $hit.ScriptName, $hit.Line, $hit.RuleName)
+            }
         }
     }
-    $errors = @($results | Where-Object { [string]$_.Severity -eq 'Error' })
-    foreach ($result in $errors) {
-        $failed = $true
-        Write-Host ("[ERROR] {0}:{1} {2} {3}" -f $result.ScriptName, $result.Line, $result.RuleName, $result.Message)
+    if ($analyzerFailed) {
+        Write-Host '[ERROR] PSScriptAnalyzer critical rules'
+    } else {
+        Write-Host '[OK] PSScriptAnalyzer critical rules'
     }
 }
 

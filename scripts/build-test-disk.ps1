@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
   Construit des images GPT/FAT32 virtuelles sous test\ pour QEMU.
 
@@ -283,7 +283,7 @@ function Write-ClusterBytes {
 }
 
 function Write-Tree {
-    param($Node, [byte[]]$Partition, [uint32]$DataStart, [uint16]$Date, [uint16]$Time, [hashtable]$UsedNames, [uint32]$ParentCluster)
+    param($Node, [byte[]]$Partition, [uint32]$DataStart, [uint16]$Date, [uint16]$Time, [uint32]$ParentCluster)
     if (-not $Node.IsDirectory) {
         $clusterBytes = $SectorsPerCluster * $SectorSize
         for ($index = 0; $index -lt $Node.Clusters; $index++) {
@@ -337,7 +337,7 @@ function Write-Tree {
         Write-ClusterBytes -Partition $Partition -Cluster ([uint32]($Node.FirstCluster + $index)) -Data $chunk -DataStartSector $DataStart -SectorsPerCluster $SectorsPerCluster
     }
     foreach ($child in $Node.Children) {
-        Write-Tree -Node $child -Partition $Partition -DataStart $DataStart -Date $Date -Time $Time -UsedNames $childNames -ParentCluster $Node.FirstCluster
+        Write-Tree -Node $child -Partition $Partition -DataStart $DataStart -Date $Date -Time $Time -ParentCluster $Node.FirstCluster
     }
 }
 
@@ -473,7 +473,7 @@ function New-FatPartition {
     $date = [uint16]((($now.Year - 1980) -shl 9) -bor ($now.Month -shl 5) -bor $now.Day)
     $time = [uint16](($now.Hour -shl 11) -bor ($now.Minute -shl 5) -bor [Math]::Floor($now.Second / 2))
     $dataStart = [uint32]($ReservedSectors + ($NumberOfFats * $fatSectors))
-    Write-Tree -Node $Root -Partition $partition -DataStart $dataStart -Date $date -Time $time -UsedNames @{} -ParentCluster 0
+    Write-Tree -Node $Root -Partition $partition -DataStart $dataStart -Date $date -Time $time -ParentCluster 0
     return @{ Partition = $partition; PartitionSectors = $partitionSectors; FatSectors = $fatSectors; DataStart = $dataStart }
 }
 

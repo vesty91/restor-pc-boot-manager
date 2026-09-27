@@ -12,13 +12,18 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: restor-pc-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   validate:
     name: Repository validation
     runs-on: windows-latest
+    timeout-minutes: 15
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Install PSScriptAnalyzer
         shell: pwsh
@@ -26,6 +31,10 @@ jobs:
           $ErrorActionPreference = 'Stop'
           Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
           Install-Module -Name PSScriptAnalyzer -Scope CurrentUser -Force -AllowClobber
+          Get-Module PSScriptAnalyzer -ListAvailable |
+            Sort-Object Version -Descending |
+            Select-Object -First 1 |
+            Format-List Name, Version
 
       - name: Validate repository
         shell: pwsh

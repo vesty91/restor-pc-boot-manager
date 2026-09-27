@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
   Restaure des fichiers EFI depuis un Golden Backup. Simulation par défaut.
 
@@ -37,15 +37,19 @@ function ConvertTo-NormalizedSerial {
 }
 
 function Get-RestorDisk {
-    $expectedSerialNorm = ConvertTo-NormalizedSerial $ExpectedSerial
-    $matches = @()
+    param(
+        [Parameter(Mandatory)][string]$Model,
+        [Parameter(Mandatory)][string]$Serial
+    )
+    $expectedSerialNorm = ConvertTo-NormalizedSerial $Serial
+    $matchedDisks = @()
     foreach ($candidate in @(Get-Disk)) {
         $serial = ConvertTo-NormalizedSerial ([string]$candidate.SerialNumber)
-        $model = ([string]$candidate.FriendlyName).Trim()
-        if ($model -eq $ExpectedModel.Trim() -and $serial -eq $expectedSerialNorm) { $matches += $candidate }
+        $modelName = ([string]$candidate.FriendlyName).Trim()
+        if ($modelName -eq $Model.Trim() -and $serial -eq $expectedSerialNorm) { $matchedDisks += $candidate }
     }
-    if ($matches.Count -ne 1) { throw 'NVMe RESTOR-PC introuvable ou ambigu. Restauration annulée.' }
-    $disk = $matches[0]
+    if ($matchedDisks.Count -ne 1) { throw 'NVMe RESTOR-PC introuvable ou ambigu. Restauration annulée.' }
+    $disk = $matchedDisks[0]
     if ([string]$disk.PartitionStyle -ne 'GPT') { throw 'Le NVMe RESTOR-PC n''est pas GPT.' }
     if ([string]$disk.BusType -ne 'NVMe') { throw 'Le disque identifié n''est pas NVMe.' }
     return $disk
@@ -85,7 +89,7 @@ if ([string]$info.Status -ne 'VALID') {
     if ($writeAllowed) { throw 'Restauration refusée : le backup n''est pas VALID.' }
 }
 
-$disk = Get-RestorDisk
+$disk = Get-RestorDisk -Model $ExpectedModel -Serial $ExpectedSerial
 Write-Step 'OK' ("NVMe confirmé, disque {0}." -f $disk.Number)
 foreach ($target in $targets) {
     $source = Join-Path $root ("ESP\" + $target)

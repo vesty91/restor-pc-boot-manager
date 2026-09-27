@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
   Installe le WinPE RescueGrid sur le NVMe RESTOR-PC sans repartitionner.
 
@@ -167,6 +167,7 @@ function Get-BcdOsLoaderIds {
 }
 
 function Set-RescueGridMenuEntry {
+    [CmdletBinding(SupportsShouldProcess = $true)]
     param([Parameter(Mandatory)][string]$ConfigPath)
     $entry = @"
 menuentry "RESCUEGRID" {
@@ -191,6 +192,9 @@ menuentry "RESCUEGRID" {
         }
     }
     $ascii = New-Object System.Text.ASCIIEncoding
+    if (-not $PSCmdlet.ShouldProcess($ConfigPath, "Écrire l'entrée RESCUEGRID")) {
+        throw 'Entrée RESCUEGRID non écrite : opération annulée par ShouldProcess.'
+    }
     [IO.File]::WriteAllText($ConfigPath, $updated, $ascii)
 }
 
@@ -202,20 +206,20 @@ if (-not $RescueGridRepo) {
 }
 
 $expectedSerialNorm = ConvertTo-NormalizedSerial $ExpectedSerial
-$matches = @()
+$matchedDisks = @()
 foreach ($candidate in (Get-Disk)) {
     $serial = ConvertTo-NormalizedSerial ([string]$candidate.SerialNumber)
     $model = ([string]$candidate.FriendlyName).Trim()
     if ($model -eq $ExpectedModel.Trim() -and $serial -eq $expectedSerialNorm) {
-        $matches += $candidate
+        $matchedDisks += $candidate
     }
 }
-if ($matches.Count -ne 1) {
+if ($matchedDisks.Count -ne 1) {
     $found = @(Get-Disk | ForEach-Object { '{0} | {1} | {2}' -f $_.Number, $_.FriendlyName, $_.SerialNumber }) -join "`n"
     throw ("NVMe RESTOR-PC introuvable ou ambigu. Attendu : {0} / {1}`nDisques vus :`n{2}" -f $ExpectedModel, $ExpectedSerial, $found)
 }
 
-$disk = $matches[0]
+$disk = $matchedDisks[0]
 $script:DiskNumber = $disk.Number
 Write-Step 'OK' ("NVMe identifié : Disk {0} / {1} / {2}" -f $disk.Number, $disk.FriendlyName, $disk.SerialNumber)
 

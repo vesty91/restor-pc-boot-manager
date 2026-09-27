@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
   Installe le média Lockpick complet sur une nouvelle partition LOCKPICK-EFI.
 
@@ -131,20 +131,24 @@ function Get-VolumeFingerprint {
 }
 
 function Get-RestorDisk {
-    $expectedSerialNorm = ConvertTo-NormalizedSerial $ExpectedSerial
-    $matches = @()
+    param(
+        [Parameter(Mandatory)][string]$Model,
+        [Parameter(Mandatory)][string]$Serial
+    )
+    $expectedSerialNorm = ConvertTo-NormalizedSerial $Serial
+    $matchedDisks = @()
     foreach ($candidate in (Get-Disk)) {
         $serial = ConvertTo-NormalizedSerial ([string]$candidate.SerialNumber)
-        $model = ([string]$candidate.FriendlyName).Trim()
-        if ($model -eq $ExpectedModel.Trim() -and $serial -eq $expectedSerialNorm) {
-            $matches += $candidate
+        $modelName = ([string]$candidate.FriendlyName).Trim()
+        if ($modelName -eq $Model.Trim() -and $serial -eq $expectedSerialNorm) {
+            $matchedDisks += $candidate
         }
     }
-    if ($matches.Count -ne 1) {
+    if ($matchedDisks.Count -ne 1) {
         $found = @(Get-Disk | ForEach-Object { '{0} | {1} | {2}' -f $_.Number, $_.FriendlyName, $_.SerialNumber }) -join "`n"
         throw ("NVMe RESTOR-PC introuvable ou ambigu.`nDisques vus :`n" + $found)
     }
-    $disk = $matches[0]
+    $disk = $matchedDisks[0]
     if ($disk.PartitionStyle -ne 'GPT') { throw 'Le NVMe RESTOR-PC n''est pas GPT.' }
     if ($disk.BusType -ne 'NVMe') { throw 'Le disque identifié n''est pas NVMe.' }
     return $disk
@@ -217,9 +221,10 @@ public static class RestorPartitionInfo {
 }
 
 function Set-GptPartitionName {
+    [CmdletBinding(SupportsShouldProcess = $true)]
     param($Partition, [string]$Name)
     Initialize-PartitionInfoType
-    $disk = Get-RestorDisk
+    $disk = Get-RestorDisk -Model $ExpectedModel -Serial $ExpectedSerial
     if ($disk.Number -ne $script:DiskNumber) { throw 'Le numéro de disque a changé avant le renommage GPT.' }
     $fresh = Get-Partition -DiskNumber $script:DiskNumber -PartitionNumber $Partition.PartitionNumber
     foreach ($existingLabel in @('RESTOR-BOOT','CODE-EFI','VESTY-EFI','RESTOR-TOOLS','RESCUE-EFI')) {
@@ -254,6 +259,9 @@ function Set-GptPartitionName {
     [Array]::Copy($source, $chars, [Math]::Min($source.Length, 35))
     $nameBytes = [Text.Encoding]::Unicode.GetBytes($chars)
     [Array]::Copy($nameBytes, 0, $setBuffer, 48, 72)
+    if (-not $PSCmdlet.ShouldProcess(("partition {0}" -f $fresh.PartitionNumber), ("Définir le nom GPT {0}" -f $Name))) {
+        throw 'Nom GPT non écrit : opération annulée par ShouldProcess.'
+    }
     [RestorPartitionInfo]::SetName($path, $setBuffer)
     $check = [RestorPartitionInfo]::Get($path)
     for ($i = 0; $i -lt 72; $i++) {
@@ -383,7 +391,7 @@ if ($isoHash -ne $ExpectedSha256.ToUpperInvariant()) {
     throw ("SHA256 ISO inattendu.`nLu : {0}`nAttendu : {1}" -f $isoHash, $ExpectedSha256)
 }
 
-$disk = Get-RestorDisk
+$disk = Get-RestorDisk -Model $ExpectedModel -Serial $ExpectedSerial
 $script:DiskNumber = $disk.Number
 Write-Step 'OK' ("NVMe Disk {0} / {1} / {2} / GPT / libre {3:N2} Gio" -f $disk.Number, $disk.FriendlyName, $disk.SerialNumber, ($disk.LargestFreeExtent / 1GB))
 
@@ -495,7 +503,7 @@ try {
     $hashLines | Set-Content (Join-Path $backup 'SHA256-MANIFEST.txt') -Encoding ascii
     Write-Step 'OK' ("Sauvegarde " + $backup)
 
-    $disk = Get-RestorDisk
+    $disk = Get-RestorDisk -Model $ExpectedModel -Serial $ExpectedSerial
     if ($disk.Number -ne $script:DiskNumber) { throw 'Identité NVMe différente juste avant création.' }
     $knownNumbers = @(Get-Partition -DiskNumber $disk.Number | Select-Object -ExpandProperty PartitionNumber)
     $snapshotBeforeCreate = Get-PartitionSnapshot -Disk $disk.Number
