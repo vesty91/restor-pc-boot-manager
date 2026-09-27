@@ -2,9 +2,23 @@
 
 [![RESTOR-PC CI](https://github.com/vesty91/restor-pc-boot-manager/actions/workflows/ci.yml/badge.svg)](https://github.com/vesty91/restor-pc-boot-manager/actions/workflows/ci.yml)
 
-Latest stable release: v1.2.0
+Latest stable release: v1.3.0
 
 Boot manager UEFI graphique basé sur rEFInd, installé sur un NVMe dédié et conçu pour démarrer directement deux installations Windows indépendantes, avec des outils de diagnostic.
+
+## Releases
+
+- [v1.3.0](docs/releases/v1.3.0.md) — restore verification, blank-disk recovery, recovery media, release integrity
+- [v1.2.0](docs/releases/v1.2.0.md) — CI, VHD lab, restore hardening
+- [v1.1.0](docs/releases/v1.1.0.md) — Golden Backup, QEMU boot validation
+
+## Modes opérationnels
+
+| Mode | Script | Rôle |
+| --- | --- | --- |
+| Maintenance / Restore (layout existant) | `Restore-RestorBootManager.ps1` | Restaure les ESP sur partitions déjà présentes |
+| Full replacement recovery (disque vierge) | `New-RestorRecoveryDisk.ps1` | GPT + layout + restore sur disque RAW/vide |
+| Recovery media | `Build-RestorRecoveryMedia.ps1` | Staging autonome (Golden externe) |
 
 ## État actuel validé
 
@@ -56,6 +70,11 @@ scripts/
   Backup-RestorBootManager.ps1
   Test-RestorGoldenBackup.ps1
   Restore-RestorBootManager.ps1
+  New-RestorRecoveryDisk.ps1
+  Build-RestorRecoveryMedia.ps1
+  Test-FullRecovery.ps1
+  New-ReleaseIntegrityManifest.ps1
+  Test-ReleaseIntegrity.ps1
   Install-RescueGridWinPE.ps1
   Install-Lockpick.ps1
   check-qemu.ps1
@@ -65,6 +84,7 @@ scripts/
   Test-Behavior.ps1
   Test-VirtualRestore.ps1
   Test-VirtualLabSafety.ps1
+  Test-RecoverySafety.ps1
   New-RestorVirtualLab.ps1
   Get-RestorVirtualLab.ps1
 ```
@@ -95,15 +115,30 @@ Le binaire rEFInd n'est pas versionné. Placez la publication officielle 0.14.2 
 
 ### Backup & Disaster Recovery
 
+Trois modes :
+
+```powershell
+# Layout existant
+.\scripts\Restore-RestorBootManager.ps1 -BackupPath "C:\RESTOR-PC-BACKUP\v1.1.0-GOLDEN-..." -AllEfi
+
+# Disque de remplacement vierge
+.\scripts\New-RestorRecoveryDisk.ps1 -DiskNumber <N> -BackupPath "C:\RESTOR-PC-BACKUP\v1.1.0-GOLDEN-..."
+
+# Media de recovery (staging)
+.\scripts\Build-RestorRecoveryMedia.ps1
+```
+
+Voir `docs/DISASTER-RECOVERY.md` et `docs/BACKUP-RESTORE.md`.
+
 ```powershell
 .\scripts\Backup-RestorBootManager.ps1
 .\scripts\Test-RestorGoldenBackup.ps1 -BackupPath "C:\RESTOR-PC-BACKUP\v1.1.0-GOLDEN-..."
 .\scripts\Restore-RestorBootManager.ps1 -BackupPath "C:\RESTOR-PC-BACKUP\v1.1.0-GOLDEN-..." -RestorBoot
 ```
 
-La dernière commande est un dry-run. Elle ne hash pas les centaines de fichiers du backup. `-PreRestoreRoot` existe, mais son défaut reste `C:\RESTOR-PC-BACKUP`. Le format interne du Golden Backup reste celui de v1.1.0.
+La dernière commande est un dry-run. Elle ne hash pas les centaines de fichiers du backup. `-PreRestoreRoot` existe, mais son défaut reste `C:\RESTOR-PC-BACKUP`. Le format interne du Golden Backup reste celui de v1.1.0 ; la version logicielle du dépôt est v1.3.0.
 
-Avec `-Apply` et `-ConfirmRestore "RESTOR-PC"`, `Restore-RestorBootManager.ps1` exécute lui-même le contrôle d'intégrité complet : avant `Get-Disk`, puis une seconde fois après le PRE-RESTORE et avant la copie Golden. `Test-RestorGoldenBackup.ps1` reste une vérification indépendante. Ce contrôle valide l'intégrité du manifeste. Il n'authentifie pas l'auteur du backup et ne rend pas la copie `robocopy` atomique. Ne pas lancer `-Apply` sur le NVMe pour valider le dépôt. Le détail est dans `docs/BACKUP-RESTORE.md`.
+Avec `-Apply` et `-ConfirmRestore "RESTOR-PC"`, `Restore-RestorBootManager.ps1` exécute le contrôle d'intégrité complet (double gate), la copie, puis la vérification SHA256 destination et écrit `RESTORE-RESULT.json`. `Test-RestorGoldenBackup.ps1` reste une vérification indépendante. Ce contrôle valide l'intégrité du manifeste. Il n'authentifie pas l'auteur du backup et ne rend pas la copie `robocopy` atomique. Ne pas lancer `-Apply` sur le NVMe pour valider le dépôt.
 
 > [!CAUTION]
 > La commande suivante écrit réellement sur la partition cible. Elle n'est pas une étape de validation de la release.
@@ -154,9 +189,12 @@ Le laboratoire VHDX est décrit dans `docs/VIRTUAL-RESTORE-LAB.md`. Le détail d
 
 ## Releases
 
+- [v1.3.0](docs/releases/v1.3.0.md)
 - [v1.2.0](docs/releases/v1.2.0.md)
 - [v1.1.0](docs/releases/v1.1.0.md)
 - [Backup et restauration](docs/BACKUP-RESTORE.md)
+- [Disaster recovery](docs/DISASTER-RECOVERY.md)
+- [Test matrix](docs/TEST-MATRIX.md)
 - [Lockpick](Lockpick/README.md) : `Lockpick.iso` n'est pas distribué par ce dépôt.
 
 ## Sécurité

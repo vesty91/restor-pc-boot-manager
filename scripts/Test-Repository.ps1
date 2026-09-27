@@ -21,6 +21,7 @@ $steps = @(
     @{ Name = 'restore safety'; Script = 'Test-RestoreSafety.ps1' },
     @{ Name = 'recovery safety'; Script = 'Test-RecoverySafety.ps1' },
     @{ Name = 'virtual lab safety'; Script = 'Test-VirtualLabSafety.ps1' },
+    @{ Name = 'release integrity'; Script = 'Test-ReleaseIntegrity.ps1' },
     @{ Name = 'Pester behavioral tests'; Script = 'Test-Behavior.ps1' }
 )
 $stepResults = [ordered]@{}
@@ -44,7 +45,10 @@ $docPaths = @(
     'CHANGELOG.md',
     'docs\releases\v1.1.0.md',
     'docs\releases\v1.2.0.md',
+    'docs\releases\v1.3.0.md',
     'docs\BACKUP-RESTORE.md',
+    'docs\DISASTER-RECOVERY.md',
+    'docs\TEST-MATRIX.md',
     'Lockpick\README.md',
     'README.md',
     '.github\workflows\ci.yml'
@@ -59,10 +63,14 @@ foreach ($relative in $docPaths) {
 if (Test-Path -LiteralPath $readmePath -PathType Leaf) {
     $readme = Get-Content -LiteralPath $readmePath -Raw
     $readmeNeedles = @(
-        'Latest stable release: v1.2.0',
+        'Latest stable release: v1.3.0',
+        'docs/releases/v1.3.0.md',
         'docs/releases/v1.2.0.md',
         'docs/releases/v1.1.0.md',
         'docs/BACKUP-RESTORE.md',
+        'docs/DISASTER-RECOVERY.md',
+        'New-RestorRecoveryDisk.ps1',
+        'Build-RestorRecoveryMedia.ps1',
         'Lockpick/README.md',
         '## CI / Validation',
         'pwsh -NoProfile -File .\scripts\Test-Repository.ps1',
@@ -158,7 +166,7 @@ function Write-RestorGitHubSummary {
         $pester = Get-Content -LiteralPath $pesterPath -Raw -Encoding UTF8 | ConvertFrom-Json
     }
     $syntax = if ($stepResults['PowerShell syntax']) { 'PASS' } else { 'FAIL' }
-    $staticNames = @('rEFInd config', 'theme assets', 'QEMU safety', 'repository safety', 'restore safety', 'recovery safety', 'virtual lab safety')
+    $staticNames = @('rEFInd config', 'theme assets', 'QEMU safety', 'repository safety', 'restore safety', 'recovery safety', 'virtual lab safety', 'release integrity')
     $staticPass = $true
     foreach ($name in $staticNames) {
         if (-not $stepResults.Contains($name) -or -not $stepResults[$name]) { $staticPass = $false }
