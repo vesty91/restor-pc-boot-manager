@@ -348,15 +348,68 @@ try {
     $toolsSource = Join-Path $root 'RESTOR-TOOLS'
     if (Test-Path -LiteralPath $toolsSource) {
         $toolsLetter = $byName['RESTOR-TOOLS'].DriveLetter
-        & robocopy.exe $toolsSource ($toolsLetter + ':\') '/E' '/COPY:DAT' '/DCOPY:DAT' '/R:2' '/W:1' '/XJ' | Out-Null
-        if ($LASTEXITCODE -ge 8) { throw 'Copie RESTOR-TOOLS echouee.' }
-        $toolsCheck = Test-RestorRestoredTarget -TargetName 'RESTOR-TOOLS' -DestinationRoot ($toolsLetter + ':\') -ManifestSnapshot $manifestSnapshot -RelativePrefix 'RESTOR-TOOLS'
-        $filesRestored += [int]$toolsCheck.FilesExpected
-        $filesVerified += [int]$toolsCheck.FilesVerified
-        foreach ($item in @($toolsCheck.HashMismatches)) { if ($item) { $hashMismatches.Add('RESTOR-TOOLS\' + $item) } }
-        foreach ($item in @($toolsCheck.MissingFiles)) { if ($item) { $hashMismatches.Add('MISSING RESTOR-TOOLS\' + $item) } }
-        if (-not $toolsCheck.Valid) { throw 'Post-restore verification failed for RESTOR-TOOLS.' }
-        Write-Step 'OK' 'RESTOR-TOOLS restaure.'
+        $toolsDest = $toolsLetter + ':\'
+        $mapped = @(
+            @{ Backup = Join-Path $toolsSource 'RescueGrid\WinPE'; Live = Join-Path $toolsDest 'WinPE\RescueGrid' },
+            @{ Backup = Join-Path $toolsSource 'RescueGrid\Project'; Live = Join-Path $toolsDest 'RescueGrid' }
+        )
+        foreach ($map in $mapped) {
+            if (-not (Test-Path -LiteralPath $map.Backup)) { continue }
+            New-Item -ItemType Directory -Path $map.Live -Force | Out-Null
+            & robocopy.exe $map.Backup $map.Live '/E' '/COPY:DAT' '/DCOPY:DAT' '/R:2' '/W:1' '/XJ' | Out-Null
+            if ($LASTEXITCODE -ge 8) { throw ("Copie RESTOR-TOOLS mappee echouee : " + $map.Live) }
+        }
+        $launcherRoot = Join-Path $toolsSource 'RescueGrid\Launchers'
+        if (Test-Path -LiteralPath $launcherRoot) {
+            Get-ChildItem -LiteralPath $launcherRoot -File -Force -ErrorAction SilentlyContinue | ForEach-Object {
+                Copy-Item -LiteralPath $_.FullName -Destination (Join-Path $toolsDest $_.Name) -Force
+            }
+        }
+        Get-ChildItem -LiteralPath $toolsSource -File -Force -ErrorAction SilentlyContinue | ForEach-Object {
+            Copy-Item -LiteralPath $_.FullName -Destination (Join-Path $toolsDest $_.Name) -Force
+        }
+
+        $toolsExpected = 0
+        $toolsVerified = 0
+        foreach ($entry in @($manifestSnapshot)) {
+            $relative = [string]$entry.RelativePath
+            if (-not $relative.StartsWith('RESTOR-TOOLS\', [StringComparison]::OrdinalIgnoreCase)) { continue }
+            $suffix = $relative.Substring('RESTOR-TOOLS\'.Length)
+            $liveRelative = $null
+            if ($suffix.StartsWith('RescueGrid\WinPE\', [StringComparison]::OrdinalIgnoreCase)) {
+                $liveRelative = 'WinPE\RescueGrid\' + $suffix.Substring('RescueGrid\WinPE\'.Length)
+            } elseif ($suffix.StartsWith('RescueGrid\Project\', [StringComparison]::OrdinalIgnoreCase)) {
+                $liveRelative = 'RescueGrid\' + $suffix.Substring('RescueGrid\Project\'.Length)
+            } elseif ($suffix.StartsWith('RescueGrid\Launchers\', [StringComparison]::OrdinalIgnoreCase)) {
+                $liveRelative = $suffix.Substring('RescueGrid\Launchers\'.Length)
+            } elseif ($suffix.StartsWith('RescueGrid\', [StringComparison]::OrdinalIgnoreCase)) {
+                continue
+            } else {
+                $liveRelative = $suffix
+            }
+            $toolsExpected++
+            $destFile = Join-Path $toolsDest $liveRelative
+            if (-not (Test-Path -LiteralPath $destFile -PathType Leaf)) {
+                $hashMismatches.Add('MISSING RESTOR-TOOLS\' + $liveRelative)
+                continue
+            }
+            $actual = (Get-FileHash -LiteralPath $destFile -Algorithm SHA256).Hash
+            $toolsVerified++
+            if (-not $actual.Equals([string]$entry.Sha256, [StringComparison]::OrdinalIgnoreCase)) {
+                $hashMismatches.Add('RESTOR-TOOLS\' + $liveRelative)
+            }
+        }
+        $filesRestored += $toolsExpected
+        $filesVerified += $toolsVerified
+        $toolsFailures = @($hashMismatches | Where-Object { $_ -like '*RESTOR-TOOLS*' })
+        if ($toolsExpected -gt 0 -and $toolsFailures.Count -gt 0) {
+            throw 'Post-restore verification failed for RESTOR-TOOLS.'
+        }
+        if (-not (Test-Path -LiteralPath (Join-Path $toolsDest 'WinPE\RescueGrid\boot.wim') -PathType Leaf)) {
+            Write-Step 'WARN' 'WinPE\RescueGrid\boot.wim absent apres restore mappe.'
+        } else {
+            Write-Step 'OK' 'RESTOR-TOOLS restaure (layout live mappe).'
+        }
     }
 
     $diskAfter = Get-Disk -Number $DiskNumber

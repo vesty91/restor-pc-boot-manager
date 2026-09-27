@@ -304,6 +304,7 @@ Describe 'Full recovery VHD lab assertions' -Tag VHD {
             $check.Valid | Should -BeTrue
         }
         [int64]$disk.LargestFreeExtent | Should -BeGreaterThan 0
-        Test-Path -LiteralPath (Join-Path ($byLabel['RESTOR-TOOLS'] + ':\') 'RescueGrid\WinPE\boot.wim') | Should -BeTrue
+        Test-Path -LiteralPath (Join-Path ($byLabel['RESTOR-TOOLS'] + ':\') 'WinPE\RescueGrid\boot.wim') | Should -BeTrue
+        Test-Path -LiteralPath (Join-Path ($byLabel['RESTOR-TOOLS'] + ':\') 'RescueGrid\WinPE\boot.wim') | Should -BeFalse
     }
 }

@@ -151,16 +151,19 @@ $oscdimg = @(
 ) | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
 
 $hasWinPe = $false
-$bootWimPath = ''
-if (-not [string]::IsNullOrWhiteSpace($BootWim) -and (Test-Path -LiteralPath $BootWim -PathType Leaf)) {
-    $bootWimPath = [IO.Path]::GetFullPath($BootWim)
-    $hasWinPe = $true
-} elseif (-not [string]::IsNullOrWhiteSpace($WinPESource)) {
-    $candidate = Join-Path $WinPESource 'sources\boot.wim'
-    if (Test-Path -LiteralPath $candidate -PathType Leaf) {
-        $bootWimPath = [IO.Path]::GetFullPath($candidate)
+$winPeMediaRoot = ''
+if (-not [string]::IsNullOrWhiteSpace($WinPESource) -and (Test-Path -LiteralPath $WinPESource -PathType Container)) {
+    $candidateRoot = [IO.Path]::GetFullPath($WinPESource)
+    $candidateWim = Join-Path $candidateRoot 'sources\boot.wim'
+    $candidateSdi = Join-Path $candidateRoot 'boot\boot.sdi'
+    if ((Test-Path -LiteralPath $candidateWim -PathType Leaf) -and (Test-Path -LiteralPath $candidateSdi -PathType Leaf)) {
+        $winPeMediaRoot = $candidateRoot
         $hasWinPe = $true
+    } else {
+        Write-Step 'WARN' 'WinPESource incomplete: need sources\boot.wim and boot\boot.sdi for ISO build.'
     }
+} elseif (-not [string]::IsNullOrWhiteSpace($BootWim) -and (Test-Path -LiteralPath $BootWim -PathType Leaf)) {
+    Write-Step 'WARN' '-BootWim alone cannot produce a bootable WinPE ISO; provide a complete -WinPESource media tree.'
 }
 
 if ($hasWinPe -and $oscdimg) {
@@ -173,8 +176,9 @@ if ($hasWinPe -and $oscdimg) {
         Write-Step 'WARN' 'WinPE ISO backend incomplete: missing etfsboot/efisys boot sectors. Staging only.'
     } else {
         $isoRoot = Join-Path $out 'iso-root'
-        New-Item -ItemType Directory -Path (Join-Path $isoRoot 'sources') -Force | Out-Null
-        Copy-Item -LiteralPath $bootWimPath -Destination (Join-Path $isoRoot 'sources\boot.wim') -Force
+        if (Test-Path -LiteralPath $isoRoot) { Remove-Item -LiteralPath $isoRoot -Recurse -Force }
+        New-Item -ItemType Directory -Path $isoRoot -Force | Out-Null
+        Copy-Item -Path (Join-Path $winPeMediaRoot '*') -Destination $isoRoot -Recurse -Force
         Copy-Item -LiteralPath $staging -Destination (Join-Path $isoRoot 'RestorPc') -Recurse -Force
         $bootData = ('2#p0,e,b"{0}"#pEF,e,b"{1}"' -f $etfsboot, $efisys)
         & $oscdimg ("-bootdata:$bootData") '-u2' '-udfver102' $isoRoot $isoPath
