@@ -46,6 +46,14 @@ if ([string]::IsNullOrWhiteSpace($commitId) -or $commitId -eq 'pending-release-t
 } else {
     $resolved = (& git -C $RepoRoot rev-parse --verify ($commitId + '^{commit}') 2>$null)
     if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace([string]$resolved)) {
+        Write-Step 'INFO' ("Commit absent du clone local, tentative de fetch : " + $commitId)
+        & git -C $RepoRoot fetch --depth 1 origin $commitId 2>$null | Out-Null
+        if ($LASTEXITCODE -ne 0) {
+            & git -C $RepoRoot fetch --unshallow 2>$null | Out-Null
+        }
+        $resolved = (& git -C $RepoRoot rev-parse --verify ($commitId + '^{commit}') 2>$null)
+    }
+    if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace([string]$resolved)) {
         $failed = $true
         Write-Step 'ERROR' ("RELEASE-INFO.json.Commit introuvable dans le depot : " + $commitId)
     } elseif (-not ([string]$resolved).Trim().Equals($commitId, [StringComparison]::OrdinalIgnoreCase)) {
