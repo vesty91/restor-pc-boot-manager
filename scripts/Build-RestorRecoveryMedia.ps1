@@ -173,7 +173,11 @@ if (-not [string]::IsNullOrWhiteSpace($WinPESource) -and (Test-Path -LiteralPath
                 Write-Step 'WARN' ("Impossible de monter boot.wim pour verifier PowerShell : " + $_.Exception.Message)
                 $hasPowerShell = $false
             } finally {
-                try { Dismount-WindowsImage -Path $mount -Discard -ErrorAction SilentlyContinue | Out-Null } catch { }
+                try {
+                    Dismount-WindowsImage -Path $mount -Discard -ErrorAction SilentlyContinue | Out-Null
+                } catch {
+                    Write-Step 'WARN' ("Dismount-WindowsImage : " + $_.Exception.Message)
+                }
                 Remove-Item -LiteralPath $mount -Recurse -Force -ErrorAction SilentlyContinue
             }
         }
