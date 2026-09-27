@@ -48,6 +48,8 @@ scripts/
   Update-RestorBootMenu.ps1
   Test-RestorBootManager.ps1
   Backup-RestorBootManager.ps1
+  Test-RestorGoldenBackup.ps1
+  Restore-RestorBootManager.ps1
   Install-RescueGridWinPE.ps1
   Install-Lockpick.ps1
   check-qemu.ps1
@@ -73,11 +75,15 @@ Le binaire rEFInd n'est pas versionné. Placez la publication officielle 0.14.2 
 .\scripts\Update-RestorBootMenu.ps1 -DiskNumber 3
 ```
 
-### Sauvegarde
+### Backup & Disaster Recovery
 
 ```powershell
-.\scripts\Backup-RestorBootManager.ps1 -DiskNumber 3 -DestinationRoot C:\RESTOR-PC-BACKUP
+.\scripts\Backup-RestorBootManager.ps1
+.\scripts\Test-RestorGoldenBackup.ps1 -BackupPath "C:\RESTOR-PC-BACKUP\v1.1.0-GOLDEN-..."
+.\scripts\Restore-RestorBootManager.ps1 -BackupPath "C:\RESTOR-PC-BACKUP\v1.1.0-GOLDEN-..." -RestorBoot
 ```
+
+La dernière commande est un dry-run. Le détail est dans `docs/BACKUP-RESTORE.md`.
 
 ## Sécurité
 
