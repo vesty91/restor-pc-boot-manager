@@ -121,8 +121,8 @@ try {
     Write-OrchestratorStep 'OK' 'backup integrity valid'
 
     $model = [string]$disk.FriendlyName
+    if ([string]::IsNullOrWhiteSpace($model)) { $model = 'Msft Virtual Disk' }
     $serial = ConvertTo-NormalizedSerial ([string]$disk.SerialNumber)
-    if ([string]::IsNullOrWhiteSpace($serial)) { $serial = 'VHD-RECOVERY-SERIAL' }
     & (Join-Path $PSScriptRoot 'New-RestorRecoveryDisk.ps1') `
         -DiskNumber ([int]$disk.Number) `
         -BackupPath $golden `

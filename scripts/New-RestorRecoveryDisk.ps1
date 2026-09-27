@@ -16,6 +16,7 @@ param(
     [Parameter(Mandatory)]
     [string]$BackupPath,
     [string]$ExpectedModel = 'SAMSUNG MZVLB256HAHQ-000L2',
+    [AllowEmptyString()]
     [string]$ExpectedSerial = '0025_3881_91C0_0621',
     [switch]$Apply,
     [string]$ConfirmRebuild = '',
@@ -42,7 +43,9 @@ function Get-RestorBlankDiskCandidate {
     param(
         [Parameter(Mandatory)][int]$Number,
         [Parameter(Mandatory)][string]$Model,
-        [Parameter(Mandatory)][string]$Serial
+        [Parameter(Mandatory)]
+        [AllowEmptyString()]
+        [string]$Serial
     )
     $disk = Get-Disk -Number $Number -ErrorAction Stop
     if ($null -eq $disk) { throw 'Disque introuvable.' }
