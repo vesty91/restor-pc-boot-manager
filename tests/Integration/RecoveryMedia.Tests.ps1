@@ -5,7 +5,7 @@ BeforeAll {
 
 Describe 'Build-RestorRecoveryMedia staging' {
     It 'cree le staging sans Golden Backup ni ISO tiers' {
-        $out = Join-Path $TestDrive 'recovery-media'
+        $out = Join-Path $script:RepoRoot 'artifacts\pester-recovery-media'
         & $script:Builder -OutputRoot $out | Out-Null
         $staging = Join-Path $out 'staging'
         Test-Path -LiteralPath (Join-Path $staging 'scripts\Restore-RestorBootManager.ps1') | Should -BeTrue
@@ -28,6 +28,9 @@ Describe 'Build-RestorRecoveryMedia staging' {
             $rel = $line.Substring(66)
             $full = Join-Path $out $rel
             (Get-FileHash -LiteralPath $full -Algorithm SHA256).Hash | Should -Be $hash
+        }
+        if (Test-Path -LiteralPath $out) {
+            Remove-Item -LiteralPath $out -Recurse -Force
         }
     }
 
